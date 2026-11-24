@@ -1,0 +1,52 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  DONOR
+  RECEIVER
+  ADMIN
+}
+
+enum PostStatus {
+  AVAILABLE
+  CLAIMED
+  COLLECTED
+  EXPIRED
+}
+
+model User {
+  id           String     @id @default(uuid())
+  name         String
+  email        String     @unique
+  passwordHash String
+  role         Role       @default(RECEIVER)
+  city         String?
+  phone        String?
+  createdAt    DateTime   @default(now())
+  posts        FoodPost[] @relation("DonorPosts")
+  claims       FoodPost[] @relation("ReceiverClaims")
+}
+
+model FoodPost {
+  id          String     @id @default(uuid())
+  title       String
+  description String?
+  quantity    String
+  city        String
+  area        String
+  address     String
+  imageUrl    String?
+  expiresAt   DateTime
+  status      PostStatus @default(AVAILABLE)
+  createdAt   DateTime   @default(now())
+  donorId     String
+  donor       User       @relation("DonorPosts", fields: [donorId], references: [id])
+  claimedById String?
+  claimedBy   User?      @relation("ReceiverClaims", fields: [claimedById], references: [id])
+}
