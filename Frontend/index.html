@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Rizq Share - Share surplus food</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <nav id="nav"></nav>
+
+  <header class="hero">
+    <div class="container hero-grid">
+      <div>
+        <h1 class="rise">Good food shouldn't go to waste.</h1>
+        <p class="lead rise">Weddings, restaurants and homes end the day with extra food. Post it here, and someone nearby collects it before it spoils.</p>
+        <div class="hero-cta rise">
+          <a class="btn btn-accent" href="#browse">Find food near you</a>
+          <a class="btn btn-outline-light" id="donateCta" href="auth.html">Donate food</a>
+        </div>
+      </div>
+      <div class="rise card-slot" id="heroCard"></div>
+    </div>
+  </header>
+
+  <section class="section container" id="how">
+    <div class="section-head"><h2>How it works</h2></div>
+    <div class="steps">
+      <div class="step"><b>1</b><h3>Donors post</h3><p>Add what you have, how many people it feeds, where to pick it up and when it expires.</p></div>
+      <div class="step"><b>2</b><h3>Receivers claim</h3><p>Browse by city and area. Claim a post and the pickup details appear instantly.</p></div>
+      <div class="step"><b>3</b><h3>Food gets collected</h3><p>The donor confirms the pickup, and the meal reaches someone who needs it.</p></div>
+    </div>
+  </section>
+
+  <section class="section container" id="browse" style="padding-top:8px">
+    <div class="section-head">
+      <h2>Available food</h2>
+      <span class="muted" id="count" aria-live="polite"></span>
+    </div>
+    <form class="filters" id="filterForm">
+      <input id="city" placeholder="City, for example Karachi" aria-label="City">
+      <input id="area" placeholder="Area, for example Gulshan" aria-label="Area">
+      <button class="btn btn-primary" type="submit">Search</button>
+    </form>
+    <div class="grid" id="list"></div>
+  </section>
+
+  <footer><div class="container">Rizq Share: sharing surplus food in Pakistan.</div></footer>
+
+  <script src="app.js"></script>
+  <script>
+    renderNav('browse');
+    const me = getUser();
+    if (me && (me.role === 'DONOR' || me.role === 'ADMIN')) {
+      const cta = document.getElementById('donateCta');
+      cta.textContent = 'Post food';
+      cta.href = 'dashboard.html';
+    }
+
+    const canClaim = me && (me.role === 'RECEIVER' || me.role === 'ADMIN');
+    let firstLoad = true;
+
+    function postCard(p) {
+      let action = '';
+      if (canClaim) {
+        action = `<button class="btn btn-primary btn-block" onclick="startClaim('${p.id}')">Claim this food</button>`;
+      } else if (!me) {
+        action = `<a class="btn btn-ghost btn-block" href="auth.html">Log in to claim</a>`;
+      }
+      return `
+        <article class="card">
+          <div class="card-top">
+            <div>
+              <h3>${esc(p.title)}</h3>
+              <span class="pill">${esc(p.quantity)}</span>
+            </div>
+            ${timerHTML(p, 'left')}
+          </div>
+          ${p.description ? `<p class="desc">${esc(p.description)}</p>` : ''}
+          <p class="meta">${ICON_PIN}<span>${esc(p.area)}, ${esc(p.city)}</span></p>
+          <p class="meta">${ICON_USER}<span>Shared by ${esc(p.donor.name)}</span></p>
+          <div class="spacer"></div>
+          ${action}
+        </article>`;
+    }
+
+    function heroCard(posts) {
+      const box = document.getElementById('heroCard');
+      if (posts.length === 0) {
+        box.innerHTML = `
+          <div class="spotlight">
+            <h3>Nothing posted right now</h3>
+            <p class="small">Have extra food? Be the first to share it today.</p>
+          </div>`;
+        return;
+      }
+      const p = posts[0];
+      box.innerHTML = `
+        <div class="spotlight">
+          <span class="small">Expiring soonest</span>
+          <h3>${esc(p.title)}</h3>
+          <p class="small" style="margin:0 0 16px">${esc(p.quantity)} in ${esc(p.area)}, ${esc(p.city)}</p>
+          ${timerHTML(p, 'left to collect')}
+          <a class="btn btn-primary btn-block" href="#browse">See all food</a>
+        </div>`;
+    }
+
+    async function loadList() {
+      const list = document.getElementById('list');
+      list.innerHTML = '<div class="skeleton"></div><div class="skeleton"></div><div class="skeleton"></div>';
+
+      const q = new URLSearchParams();
+      const city = document.getElementById('city').value.trim();
+      const area = document.getElementById('area').value.trim();
+      if (city) q.set('city', city);
+      if (area) q.set('area', area);
+
+      try {
+        const posts = await api('/posts?' + q.toString());
+        if (firstLoad && !city && !area) { heroCard(posts); }
+        else if (firstLoad) { document.getElementById('heroCard').innerHTML = ''; }
+        firstLoad = false;
+
+        document.getElementById('count').textContent =
+          posts.length === 1 ? '1 post' : `${posts.length} posts`;
+
+        list.innerHTML = posts.length
+          ? posts.map(postCard).join('')
+          : `<div class="empty" style="grid-column:1/-1">
+               <h3>No food available here yet</h3>
+               <p>Try another city or area, or check back soon.</p>
+             </div>`;
+        startTimers();
+      } catch (err) {
+        list.innerHTML = `<div class="empty" style="grid-column:1/-1">
+          <h3>Couldn't load food posts</h3><p>${esc(err.message)}</p>
+          <button class="btn btn-primary" onclick="loadList()">Try again</button></div>`;
+      }
+    }
+
+    document.getElementById('filterForm').addEventListener('submit', (e) => {
+      e.preventDefault();
+      loadList();
+    });
+
+    let pendingId = null;
+    function startClaim(id) {
+      pendingId = id;
+      const modal = openModal(`
+        <h2>Claim this food?</h2>
+        <p class="muted">Once you claim it, nobody else can. You'll see the pickup address and the donor's contact right away, so please collect it before it expires.</p>
+        <div class="modal-actions">
+          <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
+          <button class="btn btn-primary" id="confirmBtn" onclick="confirmClaim()">Yes, claim it</button>
+        </div>`);
+    }
+
+    async function confirmClaim() {
+      const btn = document.getElementById('confirmBtn');
+      btn.disabled = true;
+      btn.textContent = 'Claiming...';
+      try {
+        const p = await api(`/posts/${pendingId}/claim`, 'PATCH');
+        const modal = openModal(`
+          <div class="success-mark">
+            <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>
+          </div>
+          <h2>It's yours</h2>
+          <p class="muted">Collect it before it expires.</p>
+          <div class="pickup">
+            <p><strong>${esc(p.title)}</strong> (${esc(p.quantity)})</p>
+            <p>${ICON_PIN} ${esc(p.address)}, ${esc(p.area)}, ${esc(p.city)}</p>
+            <p>${ICON_USER} ${esc(p.donor.name)}${p.donor.phone ? ` · <a href="tel:${esc(p.donor.phone)}">${esc(p.donor.phone)}</a>` : ''}</p>
+          </div>
+          <div class="modal-actions">
+            <button class="btn btn-ghost" onclick="copyAddress()">Copy address</button>
+            <button class="btn btn-primary" onclick="closeModal(); loadList();">Done</button>
+          </div>`);
+        modal.dataset.address = `${p.address}, ${p.area}, ${p.city}`;
+      } catch (err) {
+        closeModal();
+        toast(err.message, 'error');
+        loadList();
+      }
+    }
+
+    function copyAddress() {
+      const text = document.querySelector('.modal').dataset.address;
+      navigator.clipboard.writeText(text).then(
+        () => toast('Address copied'),
+        () => toast('Could not copy the address', 'error')
+      );
+    }
+
+    loadList();
+  </script>
+</body>
+</html>
