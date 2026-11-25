@@ -56,5 +56,89 @@ const getPosts = async (req, res) => {
     res.status(500).json({ error: 'Something went wrong' });
   }
 };
+// Receiver claims a post
+const claimPost = async (req, res) => {
+  try {
+    const { id } = req.params;
 
-module.exports = { createPost, getPosts };
+    // One atomic update: only succeeds if the post is still available,
+    // not expired, and not the user's own post. This prevents double claims.
+    const result = await prisma.foodPost.updateMany({
+      where: {
+        id,
+        status: 'AVAILABLE',
+        expiresAt: { gt: new Date() },
+        donorId: { not: req.user.id },
+      },
+      data: { status: 'CLAIMED', claimedById: req.user.id },
+    });
+
+    if (result.count === 0) {
+      return res.status(409).json({ error: 'This post is no longer available' });
+    }
+
+    // Return pickup details to the receiver
+    const post = await prisma.foodPost.findUnique({
+      where: { id },
+      include: { donor: { select: { name: true, phone: true } } },
+    });
+
+    res.json(post);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Something went wrong' });
+  }
+};
+
+// Donor confirms the food was collected
+const markCollected = async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    const result = await prisma.foodPost.updateMany({
+      where: { id, donorId: req.user.id, status: 'CLAIMED' },
+      data: { status: 'COLLECTED' },
+    });
+
+    if (result.count === 0) {
+      return res.status(404).json({ error: 'Claimed post not found' });
+    }
+
+    res.json({ message: 'Marked as collected' });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Something went wrong' });
+  }
+};
+
+// Posts created by the logged-in donor
+const getMyPosts = async (req, res) => {
+  try {
+    const posts = await prisma.foodPost.findMany({
+      where: { donorId: req.user.id },
+      orderBy: { createdAt: 'desc' },
+      include: { claimedBy: { select: { name: true, phone: true } } },
+    });
+    res.json(posts);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Something went wrong' });
+  }
+};
+
+// Posts claimed by the logged-in receiver
+const getMyClaims = async (req, res) => {
+  try {
+    const posts = await prisma.foodPost.findMany({
+      where: { claimedById: req.user.id },
+      orderBy: { createdAt: 'desc' },
+      include: { donor: { select: { name: true, phone: true } } },
+    });
+    res.json(posts);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Something went wrong' });
+  }
+};
+
+module.exports = { createPost, getPosts, claimPost, markCollected, getMyPosts, getMyClaims };
