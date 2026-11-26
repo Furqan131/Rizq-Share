@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Browse food - Rizq Share</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <nav id="nav"></nav>
+
+  <header class="page-head">
+    <div class="container">
+      <h1>Browse food</h1>
+      <p>Fresh food shared near you. New posts show up here automatically.</p>
+    </div>
+  </header>
+
+  <main class="container section">
+    <form class="filters" id="filterForm">
+      <input id="city" placeholder="City, for example Karachi" aria-label="City">
+      <input id="area" placeholder="Area, for example Gulshan" aria-label="Area">
+      <button class="btn btn-primary" type="submit">Search</button>
+      <button class="btn btn-ghost" type="button" onclick="clearFilters()">Clear</button>
+    </form>
+
+    <p class="muted" id="count" aria-live="polite" style="margin:0 0 14px"></p>
+    <div class="grid" id="list"></div>
+  </main>
+
+  <footer><div class="container">Rizq Share: sharing surplus food in Pakistan.</div></footer>
+
+  <script src="app.js"></script>
+  <script>
+    renderNav('browse');
+
+    let lastSignature = '';
+
+    // silent = background refresh: no loading skeleton, and no redraw if nothing changed
+    async function loadList(silent = false) {
+      const list = document.getElementById('list');
+      if (!silent) {
+        list.innerHTML = '<div class="skeleton"></div><div class="skeleton"></div><div class="skeleton"></div>';
+        lastSignature = '';
+      }
+
+      const q = new URLSearchParams();
+      const city = document.getElementById('city').value.trim();
+      const area = document.getElementById('area').value.trim();
+      if (city) q.set('city', city);
+      if (area) q.set('area', area);
+
+      try {
+        const posts = await api('/posts?' + q.toString());
+        const signature = posts.map((p) => p.id).join(',');
+
+        document.getElementById('count').textContent =
+          posts.length === 1 ? '1 post available' : `${posts.length} posts available`;
+
+        if (silent && signature === lastSignature) return;
+        lastSignature = signature;
+
+        list.innerHTML = posts.length
+          ? posts.map(postCard).join('')
+          : `<div class="empty" style="grid-column:1/-1">
+               <h3>No food available here yet</h3>
+               <p>Try another city or area, or check back soon. Got extra food yourself?</p>
+               <button class="btn btn-primary" onclick="donateNow()">Donate now</button>
+             </div>`;
+        startTimers();
+      } catch (err) {
+        if (silent) return;
+        list.innerHTML = `<div class="empty" style="grid-column:1/-1">
+          <h3>Couldn't load food posts</h3><p>${esc(err.message)}</p>
+          <button class="btn btn-primary" onclick="loadList()">Try again</button></div>`;
+      }
+    }
+
+    // Called by the shared claim flow after someone claims food
+    function reloadPosts() { loadList(); }
+
+    function clearFilters() {
+      document.getElementById('city').value = '';
+      document.getElementById('area').value = '';
+      loadList();
+    }
+
+    document.getElementById('filterForm').addEventListener('submit', (e) => {
+      e.preventDefault();
+      loadList();
+    });
+
+    // Pick up new posts from other donors every 45 seconds while the tab is open
+    setInterval(() => {
+      if (document.visibilityState === 'visible') loadList(true);
+    }, 45000);
+
+    loadList();
+  </script>
+</body>
+</html>
