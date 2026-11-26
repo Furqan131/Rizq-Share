@@ -309,9 +309,32 @@ td select { padding: 6px 8px; width: auto; }
   .nav-menu { display: none; position: absolute; top: 66px; left: 0; right: 0; background: #fff; border-bottom: 1px solid var(--line); flex-direction: column; align-items: stretch; padding: 10px 20px 16px; box-shadow: 0 16px 30px rgba(14, 59, 47, 0.1); }
   .nav-menu.open { display: flex; animation: fade .2s ease; }
   .nav-menu a { padding: 12px; }
-  .two-col, .cards-3 { grid-template-columns: 1fr; }
+  .two-col, .cards-3, .tips-grid { grid-template-columns: 1fr; }
+  .cards-4 { grid-template-columns: repeat(2, 1fr); }
+}
+@media (max-width: 560px) {
+  .cards-4 { grid-template-columns: 1fr; }
+  .band strong { font-size: 1.8rem; }
 }
 @media (max-width: 480px) {
   .brand { font-size: 18px; }
   .nav-actions .btn-sm { padding: 8px 12px; }
 }
+
+/* ---------- Home and Browse ---------- */
+.band { background: #fff; border-bottom: 1px solid var(--line); }
+.band-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; padding: 26px 0; }
+.band strong { display: block; font-family: 'Bricolage Grotesque', sans-serif; font-size: 2.5rem; line-height: 1; color: var(--pine); }
+.band span { color: var(--muted); font-size: 15px; }
+.cards-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 18px; }
+.tips-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; }
+.tip-card { background: #fff; border: 1px solid var(--line); border-radius: var(--radius); padding: 24px; }
+.tip-card h3 { font-size: 1.3rem; margin-bottom: 12px; }
+.tip-card ul { margin: 0; padding-left: 20px; }
+.tip-card li { margin-bottom: 8px; color: var(--ink); }
+.cta-band { background: var(--pine); color: #fff; border-radius: 20px; padding: 36px; display: flex; justify-content: space-between; align-items: center; gap: 20px; flex-wrap: wrap; }
+.cta-band h2 { font-size: clamp(1.5rem, 3vw, 2.1rem); max-width: 520px; }
+.cta-band .hero-cta { margin: 0; }
+.own-note { margin: 0; background: var(--mint); color: var(--pine); border-radius: 10px; padding: 10px 12px; font-size: 14px; text-align: center; }
+.more-link { font-weight: 600; color: var(--pine); text-decoration: none; }
+.more-link:hover { text-decoration: underline; }
