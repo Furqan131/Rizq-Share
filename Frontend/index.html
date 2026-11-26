@@ -16,7 +16,7 @@
         <p class="lead rise">Weddings, restaurants and homes end the day with extra food. Post it here, and someone nearby collects it before it spoils.</p>
         <div class="hero-cta rise">
           <a class="btn btn-accent" href="#browse">Find food near you</a>
-          <a class="btn btn-outline-light" id="donateCta" href="auth.html">Donate food</a>
+          <button class="btn btn-outline-light" onclick="donateNow()">Donate now</button>
         </div>
       </div>
       <div class="rise card-slot" id="heroCard"></div>
@@ -49,13 +49,8 @@
 
   <script src="app.js"></script>
   <script>
-    renderNav('browse');
+    renderNav('home');
     const me = getUser();
-    if (me && (me.role === 'DONOR' || me.role === 'ADMIN')) {
-      const cta = document.getElementById('donateCta');
-      cta.textContent = 'Post food';
-      cta.href = 'dashboard.html';
-    }
 
     const canClaim = me && (me.role === 'RECEIVER' || me.role === 'ADMIN');
     let firstLoad = true;

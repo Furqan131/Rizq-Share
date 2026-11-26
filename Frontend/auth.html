@@ -67,6 +67,10 @@
       document.getElementById('error').textContent = '';
     }
 
+    const params = new URLSearchParams(location.search);
+    if (params.get('mode') === 'signup') setMode('signup');
+    if (params.get('role') === 'DONOR') document.getElementById('roleDonor').checked = true;
+
     document.getElementById('authForm').addEventListener('submit', async (e) => {
       e.preventDefault();
       const v = (id) => document.getElementById(id).value.trim();

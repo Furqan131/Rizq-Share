@@ -190,7 +190,12 @@
       }
     }
 
-    load();
+    load().then(() => {
+      if (isDonor && new URLSearchParams(location.search).get('post') === '1') {
+        history.replaceState(null, '', 'dashboard.html');
+        openPostForm();
+      }
+    });
   </script>
 </body>
 </html>

@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>My profile - Rizq Share</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <nav id="nav"></nav>
+
+  <main class="container section" style="max-width:640px">
+    <div class="form-card" id="card">
+      <div class="skeleton" style="min-height:260px"></div>
+    </div>
+  </main>
+
+  <script src="app.js"></script>
+  <script>
+    renderNav('profile');
+    if (!getToken() || !getUser()) location.href = 'auth.html';
+
+    async function load() {
+      const card = document.getElementById('card');
+      try {
+        const u = await api('/me');
+        const isAdmin = u.role === 'ADMIN';
+        const joined = new Date(u.createdAt).toLocaleDateString([], { dateStyle: 'long' });
+
+        card.innerHTML = `
+          <div class="profile-top">
+            <div class="big-avatar">${esc(u.name.charAt(0).toUpperCase())}</div>
+            <div>
+              <h2>${esc(u.name)}</h2>
+              <span class="muted">Member since ${esc(joined)}</span>
+            </div>
+          </div>
+
+          <form id="profileForm" novalidate>
+            <label class="field"><span>Full name</span><input id="name" value="${esc(u.name)}" autocomplete="name"></label>
+            <label class="field"><span>Email</span><input value="${esc(u.email)}" readonly></label>
+            <div class="row">
+              <label class="field"><span>City</span><input id="city" value="${esc(u.city || '')}"></label>
+              <label class="field"><span>Phone</span><input id="phone" type="tel" value="${esc(u.phone || '')}"></label>
+            </div>
+
+            ${isAdmin
+              ? `<p class="muted">Your account type is <strong>Administrator</strong>.</p>`
+              : `<div class="roles" role="radiogroup" aria-label="Account type">
+                   <input type="radio" name="role" id="roleReceiver" value="RECEIVER" ${u.role === 'RECEIVER' ? 'checked' : ''}>
+                   <label for="roleReceiver"><strong>Receive food</strong><small>Claim and collect</small></label>
+                   <input type="radio" name="role" id="roleDonor" value="DONOR" ${u.role === 'DONOR' ? 'checked' : ''}>
+                   <label for="roleDonor"><strong>Donate food</strong><small>Post what's left</small></label>
+                 </div>`}
+
+            <p class="error-text" id="error" role="alert"></p>
+            <button class="btn btn-primary" id="saveBtn" type="submit">Save changes</button>
+          </form>`;
+
+        document.getElementById('profileForm').addEventListener('submit', save);
+      } catch (err) {
+        if (!getToken()) { location.href = 'auth.html'; return; }
+        card.innerHTML = `<h2>Couldn't load your profile</h2><p class="muted">${esc(err.message)}</p>
+          <button class="btn btn-primary" onclick="load()">Try again</button>`;
+      }
+    }
+
+    async function save(e) {
+      e.preventDefault();
+      const v = (id) => document.getElementById(id).value.trim();
+      const btn = document.getElementById('saveBtn');
+      const errorBox = document.getElementById('error');
+      errorBox.textContent = '';
+
+      const body = { name: v('name'), city: v('city'), phone: v('phone') };
+      const picked = document.querySelector('input[name="role"]:checked');
+      if (picked) body.role = picked.value;
+
+      btn.disabled = true;
+      btn.textContent = 'Saving...';
+      try {
+        const before = getUser().role;
+        const data = await api('/me', 'PATCH', body);
+        saveSession(data);
+        renderNav('profile');
+        toast(before !== data.user.role ? 'Account type changed' : 'Profile saved');
+        load();
+      } catch (err) {
+        errorBox.textContent = err.message;
+        btn.disabled = false;
+        btn.textContent = 'Save changes';
+      }
+    }
+
+    load();
+  </script>
+</body>
+</html>

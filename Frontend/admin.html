@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Admin panel - Rizq Share</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <nav id="nav"></nav>
+
+  <main class="container section">
+    <div class="section-head">
+      <div>
+        <h2>Admin panel</h2>
+        <p class="muted" style="margin:6px 0 0">Keep Rizq Share safe and running smoothly.</p>
+      </div>
+    </div>
+
+    <div class="tabbar" role="tablist" id="tabs">
+      <button class="on" data-tab="overview" onclick="show('overview')">Overview</button>
+      <button data-tab="posts" onclick="show('posts')">Food posts</button>
+      <button data-tab="users" onclick="show('users')">Users</button>
+      <button data-tab="messages" onclick="show('messages')">Messages<span class="count-dot" id="unread" style="display:none"></span></button>
+    </div>
+
+    <div id="panel"></div>
+  </main>
+
+  <script src="app.js"></script>
+  <script>
+    renderNav('admin');
+    const me = getUser();
+    // The server also enforces this; the check here just avoids showing an empty page
+    if (!me || me.role !== 'ADMIN') location.href = 'index.html';
+
+    const panel = document.getElementById('panel');
+    let currentTab = 'overview';
+
+    const skeleton = () => { panel.innerHTML = '<div class="skeleton" style="min-height:160px"></div>'; };
+    const failed = (err) => {
+      if (!getToken()) { location.href = 'auth.html'; return; }
+      panel.innerHTML = `<div class="empty"><h3>Couldn't load this section</h3><p>${esc(err.message)}</p>
+        <button class="btn btn-primary" onclick="show(currentTab)">Try again</button></div>`;
+    };
+
+    const displayStatus = (p) =>
+      p.status === 'AVAILABLE' && new Date(p.expiresAt) < new Date() ? 'EXPIRED' : p.status;
+    const STATUS_LABEL = { AVAILABLE: 'Available', CLAIMED: 'Claimed', COLLECTED: 'Collected', EXPIRED: 'Expired' };
+
+    function setUnread(n) {
+      const dot = document.getElementById('unread');
+      dot.textContent = n;
+      dot.style.display = n > 0 ? 'inline-grid' : 'none';
+    }
+
+    function show(tab) {
+      currentTab = tab;
+      document.querySelectorAll('#tabs button').forEach((b) => b.classList.toggle('on', b.dataset.tab === tab));
+      skeleton();
+      ({ overview, posts, users, messages })[tab]();
+    }
+
+    /* ---------- Overview ---------- */
+    async function overview() {
+      try {
+        const s = await api('/admin/stats');
+        setUnread(s.unreadMessages);
+        const items = [
+          [s.users, 'Users'], [s.donors, 'Donors'], [s.receivers, 'Receivers'], [s.admins, 'Admins'],
+          [s.posts, 'Food posts'], [s.available, 'Available now'], [s.claimed, 'Waiting for pickup'],
+          [s.collected, 'Collected'], [s.unreadMessages, 'Unread messages'],
+        ];
+        panel.innerHTML = `<div class="stats" style="margin-top:0">${items
+          .map(([n, label]) => `<div class="stat"><strong>${n}</strong><span>${label}</span></div>`).join('')}</div>`;
+      } catch (err) { failed(err); }
+    }
+
+    /* ---------- Posts ---------- */
+    async function posts() {
+      try {
+        const list = await api('/admin/posts');
+        if (!list.length) {
+          panel.innerHTML = '<div class="empty"><h3>No food posts yet</h3><p>Posts will appear here as donors share food.</p></div>';
+          return;
+        }
+        panel.innerHTML = `<div class="table-wrap"><table>
+          <thead><tr><th>Food</th><th>Donor</th><th>Location</th><th>Status</th><th>Expires</th><th></th></tr></thead>
+          <tbody>${list.map((p) => {
+            const st = displayStatus(p);
+            return `<tr>
+              <td><strong>${esc(p.title)}</strong><small>${esc(p.quantity)}</small></td>
+              <td>${esc(p.donor.name)}<small>${esc(p.donor.email)}</small></td>
+              <td>${esc(p.area)}, ${esc(p.city)}</td>
+              <td><span class="chip ${st}">${STATUS_LABEL[st]}</span>${p.claimedBy ? `<small>by ${esc(p.claimedBy.name)}</small>` : ''}</td>
+              <td>${esc(fmtDate(p.expiresAt))}</td>
+              <td><button class="btn btn-danger btn-sm" onclick="confirmDeletePost('${p.id}', this)">Delete</button></td>
+            </tr>`;
+          }).join('')}</tbody></table></div>`;
+      } catch (err) { failed(err); }
+    }
+
+    function confirmDeletePost(id, btn) {
+      const title = btn.closest('tr').querySelector('strong').textContent;
+      openModal(`
+        <h2>Delete this post?</h2>
+        <p class="muted">"${esc(title)}" will be removed for everyone. This can't be undone.</p>
+        <div class="modal-actions">
+          <button class="btn btn-ghost" onclick="closeModal()">Keep it</button>
+          <button class="btn btn-primary" style="background:var(--chili)" onclick="deletePost('${id}')">Delete post</button>
+        </div>`);
+    }
+
+    async function deletePost(id) {
+      try {
+        await api('/admin/posts/' + id, 'DELETE');
+        closeModal();
+        toast('Post deleted');
+        posts();
+      } catch (err) {
+        closeModal();
+        toast(err.message, 'error');
+      }
+    }
+
+    /* ---------- Users ---------- */
+    async function users() {
+      try {
+        const list = await api('/admin/users');
+        panel.innerHTML = `<div class="table-wrap"><table>
+          <thead><tr><th>Name</th><th>Role</th><th>City</th><th>Activity</th><th>Joined</th></tr></thead>
+          <tbody>${list.map((u) => `<tr>
+            <td><strong>${esc(u.name)}</strong><small>${esc(u.email)}</small></td>
+            <td>
+              <select aria-label="Role for ${esc(u.name)}" onchange="changeRole('${u.id}', this)" ${u.id === me.id ? 'disabled title="You can\'t change your own role"' : ''}>
+                ${['DONOR', 'RECEIVER', 'ADMIN'].map((r) => `<option value="${r}" ${u.role === r ? 'selected' : ''}>${ROLE_LABEL[r]}</option>`).join('')}
+              </select>
+            </td>
+            <td>${esc(u.city || '-')}</td>
+            <td>${u._count.posts} posted<small>${u._count.claims} claimed</small></td>
+            <td>${esc(new Date(u.createdAt).toLocaleDateString([], { dateStyle: 'medium' }))}</td>
+          </tr>`).join('')}</tbody></table></div>`;
+      } catch (err) { failed(err); }
+    }
+
+    async function changeRole(id, select) {
+      const role = select.value;
+      select.disabled = true;
+      try {
+        await api(`/admin/users/${id}/role`, 'PATCH', { role });
+        toast('Role updated');
+      } catch (err) {
+        toast(err.message, 'error');
+        users();
+        return;
+      }
+      select.disabled = false;
+    }
+
+    /* ---------- Messages ---------- */
+    async function messages() {
+      try {
+        const list = await api('/admin/messages');
+        setUnread(list.filter((m) => !m.isRead).length);
+        if (!list.length) {
+          panel.innerHTML = '<div class="empty"><h3>No messages yet</h3><p>Messages from the Contact us page will show up here.</p></div>';
+          return;
+        }
+        panel.innerHTML = list.map((m) => `
+          <article class="msg ${m.isRead ? '' : 'unread'}">
+            <div class="msg-head">
+              <div><strong>${esc(m.name)}</strong> <a href="mailto:${esc(m.email)}">${esc(m.email)}</a></div>
+              <span class="muted">${esc(fmtDate(m.createdAt))}</span>
+            </div>
+            ${m.subject ? `<p><strong>${esc(m.subject)}</strong></p>` : ''}
+            <p>${esc(m.message)}</p>
+            <div class="msg-actions">
+              <a class="btn btn-ghost btn-sm" href="mailto:${esc(m.email)}">Reply by email</a>
+              ${m.isRead ? '' : `<button class="btn btn-ghost btn-sm" onclick="markRead('${m.id}')">Mark as read</button>`}
+              <button class="btn btn-danger btn-sm" onclick="removeMessage('${m.id}')">Delete</button>
+            </div>
+          </article>`).join('');
+      } catch (err) { failed(err); }
+    }
+
+    async function markRead(id) {
+      try { await api(`/admin/messages/${id}/read`, 'PATCH'); messages(); }
+      catch (err) { toast(err.message, 'error'); }
+    }
+
+    async function removeMessage(id) {
+      try { await api('/admin/messages/' + id, 'DELETE'); toast('Message deleted'); messages(); }
+      catch (err) { toast(err.message, 'error'); }
+    }
+
+    show('overview');
+  </script>
+</body>
+</html>

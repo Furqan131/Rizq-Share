@@ -44,24 +44,116 @@ const LOGO = `<svg width="28" height="28" viewBox="0 0 28 28" aria-hidden="true"
   <circle cx="14" cy="14" r="11" fill="none" stroke="currentColor" stroke-width="3" stroke-dasharray="52 17" stroke-linecap="round" transform="rotate(-90 14 14)"/>
   <circle cx="14" cy="14" r="4" fill="#f2b01e"/></svg>`;
 
+function saveSession(data) {
+  localStorage.setItem('token', data.token);
+  localStorage.setItem('user', JSON.stringify(data.user));
+}
+
+const ROLE_LABEL = { DONOR: 'Donor', RECEIVER: 'Receiver', ADMIN: 'Admin' };
+
 function renderNav(active) {
   const user = getUser();
+  const isAdmin = !!user && user.role === 'ADMIN';
   const link = (href, label, key) =>
     `<a href="${href}" class="${active === key ? 'active' : ''}">${label}</a>`;
 
-  document.getElementById('nav').className = 'nav';
-  document.getElementById('nav').innerHTML = `
+  const profileMenu = user
+    ? `<div class="profile">
+         <button class="avatar-btn" id="profileBtn" aria-label="My account" aria-haspopup="true" aria-expanded="false" onclick="toggleProfile(event)">${esc(user.name.charAt(0).toUpperCase())}</button>
+         <div class="menu-pop" id="profilePop" role="menu">
+           <div class="menu-head">
+             <strong>${esc(user.name)}</strong>
+             <span>${esc(user.email)}</span>
+             <span class="role-tag">${esc(ROLE_LABEL[user.role] || user.role)}</span>
+           </div>
+           <a href="profile.html" role="menuitem">My profile</a>
+           <a href="dashboard.html" role="menuitem">${user.role === 'RECEIVER' ? 'My claims' : 'My posts'}</a>
+           ${isAdmin ? '<a href="admin.html" role="menuitem">Admin panel</a>' : ''}
+           <button class="danger" role="menuitem" onclick="logout()">Log out</button>
+         </div>
+       </div>`
+    : `<a class="btn btn-ghost btn-sm" href="auth.html">Log in</a>`;
+
+  const nav = document.getElementById('nav');
+  nav.className = 'nav';
+  nav.innerHTML = `
     <div class="container nav-inner">
       <a class="brand" href="index.html">${LOGO}Rizq Share</a>
-      <div class="nav-links">
-        ${link('index.html', 'Browse food', 'browse')}
-        ${user
-          ? `${link('dashboard.html', 'Dashboard', 'dashboard')}
-             <button class="link-btn" onclick="logout()">Log out</button>
-             <span class="avatar" title="${esc(user.name)}">${esc(user.name.charAt(0).toUpperCase())}</span>`
-          : `${link('auth.html', 'Log in', 'auth')}`}
+      <div class="nav-menu" id="navMenu">
+        ${link('index.html', 'Home', 'home')}
+        ${link('index.html#browse', 'Browse food', 'browse')}
+        ${link('about.html', 'About us', 'about')}
+        ${link('contact.html', 'Contact us', 'contact')}
+        ${isAdmin ? link('admin.html', 'Admin', 'admin') : ''}
+      </div>
+      <div class="nav-actions">
+        <button class="btn btn-accent btn-sm" onclick="donateNow()">Donate now</button>
+        ${profileMenu}
+        <button class="nav-toggle" aria-label="Open menu" aria-expanded="false" onclick="toggleMenu()">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M4 7h16M4 12h16M4 17h16"/></svg>
+        </button>
       </div>
     </div>`;
+
+  if (!window.__navBound) {
+    window.__navBound = true;
+    document.addEventListener('click', (e) => { if (!e.target.closest('.profile')) closeProfile(); });
+    document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeProfile(); });
+  }
+}
+
+function toggleProfile(e) {
+  e.stopPropagation();
+  const pop = document.getElementById('profilePop');
+  const btn = document.getElementById('profileBtn');
+  const open = pop.classList.toggle('open');
+  btn.setAttribute('aria-expanded', String(open));
+}
+
+function closeProfile() {
+  const pop = document.getElementById('profilePop');
+  if (pop) pop.classList.remove('open');
+  const btn = document.getElementById('profileBtn');
+  if (btn) btn.setAttribute('aria-expanded', 'false');
+}
+
+function toggleMenu() {
+  const menu = document.getElementById('navMenu');
+  const open = menu.classList.toggle('open');
+  document.querySelector('.nav-toggle').setAttribute('aria-expanded', String(open));
+}
+
+// The "Donate now" button
+function donateNow() {
+  const user = getUser();
+  if (!user) {
+    location.href = 'auth.html?mode=signup&role=DONOR';
+    return;
+  }
+  if (user.role === 'RECEIVER') {
+    openModal(`
+      <h2>Want to donate food?</h2>
+      <p class="muted">Your account is set up to receive food. Switch it to a donor account to post surplus food. You can switch back any time from My profile.</p>
+      <div class="modal-actions">
+        <button class="btn btn-ghost" onclick="closeModal()">Not now</button>
+        <button class="btn btn-primary" id="switchBtn" onclick="switchToDonor()">Switch to donor</button>
+      </div>`);
+    return;
+  }
+  location.href = 'dashboard.html?post=1';
+}
+
+async function switchToDonor() {
+  const btn = document.getElementById('switchBtn');
+  btn.disabled = true;
+  btn.textContent = 'Switching...';
+  try {
+    saveSession(await api('/me', 'PATCH', { role: 'DONOR' }));
+    location.href = 'dashboard.html?post=1';
+  } catch (err) {
+    closeModal();
+    toast(err.message, 'error');
+  }
 }
 
 /* ---------- Toasts ---------- */
