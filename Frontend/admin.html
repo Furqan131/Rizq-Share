@@ -67,8 +67,8 @@
         const s = await api('/admin/stats');
         setUnread(s.unreadMessages);
         const items = [
-          [s.users, 'Users'], [s.donors, 'Donors'], [s.receivers, 'Receivers'], [s.admins, 'Admins'],
-          [s.posts, 'Food posts'], [s.available, 'Available now'], [s.claimed, 'Waiting for pickup'],
+          [s.users, 'Users'], [s.admins, 'Admins'], [s.posts, 'Food posts'],
+          [s.available, 'Available now'], [s.claimed, 'Waiting for pickup'],
           [s.collected, 'Collected'], [s.unreadMessages, 'Unread messages'],
         ];
         panel.innerHTML = `<div class="stats" style="margin-top:0">${items
@@ -133,7 +133,7 @@
             <td><strong>${esc(u.name)}</strong><small>${esc(u.email)}</small></td>
             <td>
               <select aria-label="Role for ${esc(u.name)}" onchange="changeRole('${u.id}', this)" ${u.id === me.id ? 'disabled title="You can\'t change your own role"' : ''}>
-                ${['DONOR', 'RECEIVER', 'ADMIN'].map((r) => `<option value="${r}" ${u.role === r ? 'selected' : ''}>${ROLE_LABEL[r]}</option>`).join('')}
+                ${[['MEMBER', 'Member'], ['ADMIN', 'Admin']].map(([r, label]) => `<option value="${r}" ${(u.role === 'ADMIN' ? 'ADMIN' : 'MEMBER') === r ? 'selected' : ''}>${label}</option>`).join('')}
               </select>
             </td>
             <td>${esc(u.city || '-')}</td>

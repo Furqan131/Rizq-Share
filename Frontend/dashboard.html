@@ -13,14 +13,18 @@
     <div class="section-head">
       <div>
         <h2 id="title"></h2>
-        <p class="muted" id="subtitle" style="margin:6px 0 0"></p>
+        <p class="muted" style="margin:6px 0 0">Food you've shared and food you've claimed, all in one place.</p>
       </div>
-      <button class="btn btn-accent" id="postBtn" style="display:none" onclick="openPostForm()">Post food</button>
+      <button class="btn btn-accent" onclick="openPostForm()">Post food</button>
     </div>
 
     <div class="stats" id="stats"></div>
 
-    <h3 id="listTitle" style="margin-bottom:16px"></h3>
+    <div class="tabbar" role="tablist">
+      <button class="on" id="tabPosts" onclick="setTab('posts')">My posts</button>
+      <button id="tabClaims" onclick="setTab('claims')">My claims</button>
+    </div>
+
     <div class="grid" id="list"></div>
   </main>
 
@@ -30,39 +34,38 @@
     const user = getUser();
     if (!user || !getToken()) location.href = 'auth.html';
 
-    const isDonor = user.role === 'DONOR' || user.role === 'ADMIN';
-
     document.getElementById('title').textContent = `Welcome, ${user.name.split(' ')[0]}`;
-    document.getElementById('subtitle').textContent = isDonor
-      ? 'Post surplus food and confirm when it has been collected.'
-      : 'Food you have claimed and its pickup details.';
-    document.getElementById('listTitle').textContent = isDonor ? 'Your posts' : 'Your claims';
-    if (isDonor) document.getElementById('postBtn').style.display = 'inline-flex';
+
+    let tab = 'posts';
+    let data = { posts: [], claims: [] };
 
     // A post that is still AVAILABLE but past its time is shown as expired
     const displayStatus = (p) =>
       p.status === 'AVAILABLE' && new Date(p.expiresAt) < new Date() ? 'EXPIRED' : p.status;
 
-    const STATUS_LABEL = {
+    const STATUS_LABEL = (status, mode) => ({
       AVAILABLE: 'Available',
-      CLAIMED: isDonor ? 'Waiting for pickup' : 'To collect',
+      CLAIMED: mode === 'posts' ? 'Waiting for pickup' : 'To collect',
       COLLECTED: 'Collected',
       EXPIRED: 'Expired',
-    };
+    }[status]);
 
-    function renderStats(posts) {
-      const count = (s) => posts.filter((p) => displayStatus(p) === s).length;
-      const items = isDonor
-        ? [[count('AVAILABLE'), 'Available now'], [count('CLAIMED'), 'Waiting for pickup'], [count('COLLECTED'), 'Collected']]
-        : [[count('CLAIMED'), 'To collect'], [count('COLLECTED'), 'Collected']];
+    function renderStats() {
+      const mine = (s) => data.posts.filter((p) => displayStatus(p) === s).length;
+      const items = [
+        [mine('AVAILABLE'), 'Posts available'],
+        [mine('CLAIMED'), 'Waiting for pickup'],
+        [mine('COLLECTED'), 'Posts collected'],
+        [data.claims.filter((p) => p.status === 'CLAIMED').length, 'Claims to collect'],
+      ];
       document.getElementById('stats').innerHTML = items
         .map(([n, label]) => `<div class="stat"><strong>${n}</strong><span>${label}</span></div>`)
         .join('');
     }
 
-    function card(p) {
+    function card(p, mode) {
       const status = displayStatus(p);
-      const other = isDonor ? p.claimedBy : p.donor;
+      const other = mode === 'posts' ? p.claimedBy : p.donor;
       const showTimer = status === 'AVAILABLE' || status === 'CLAIMED';
       return `
         <article class="card">
@@ -71,48 +74,64 @@
               <h3>${esc(p.title)}</h3>
               <span class="pill">${esc(p.quantity)}</span>
             </div>
-            <span class="chip ${status}">${STATUS_LABEL[status]}</span>
+            <span class="chip ${status}">${STATUS_LABEL(status, mode)}</span>
           </div>
           ${showTimer ? timerHTML(p, 'left') : `<p class="meta muted">Expires ${esc(fmtDate(p.expiresAt))}</p>`}
           <p class="meta">${ICON_PIN}<span>${esc(p.address)}, ${esc(p.area)}, ${esc(p.city)}</span></p>
           ${other
-            ? `<p class="meta">${ICON_USER}<span>${isDonor ? 'Claimed by' : 'Shared by'} ${esc(other.name)}${other.phone ? ` · <a href="tel:${esc(other.phone)}">${esc(other.phone)}</a>` : ''}</span></p>`
+            ? `<p class="meta">${ICON_USER}<span>${mode === 'posts' ? 'Claimed by' : 'Shared by'} ${esc(other.name)}${other.phone ? ` · <a href="tel:${esc(other.phone)}">${esc(other.phone)}</a>` : ''}</span></p>`
             : ''}
           <div class="spacer"></div>
-          ${isDonor && status === 'CLAIMED'
+          ${mode === 'posts' && status === 'CLAIMED'
             ? `<button class="btn btn-primary btn-block" onclick="collect('${p.id}', this)">Mark as collected</button>`
             : ''}
         </article>`;
+    }
+
+    function renderList() {
+      const list = document.getElementById('list');
+      const posts = data[tab];
+
+      if (posts.length === 0) {
+        list.innerHTML = tab === 'posts'
+          ? `<div class="empty" style="grid-column:1/-1">
+               <h3>You haven't posted any food yet</h3>
+               <p>Got extra food today? Share it in under a minute.</p>
+               <button class="btn btn-primary" onclick="openPostForm()">Post food</button>
+             </div>`
+          : `<div class="empty" style="grid-column:1/-1">
+               <h3>You haven't claimed any food yet</h3>
+               <p>Browse what's available near you and claim a meal.</p>
+               <a class="btn btn-primary" href="browse.html">Browse food</a>
+             </div>`;
+        return;
+      }
+
+      list.innerHTML = posts.map((p) => card(p, tab)).join('');
+      startTimers();
+    }
+
+    function setTab(t) {
+      tab = t;
+      document.getElementById('tabPosts').classList.toggle('on', t === 'posts');
+      document.getElementById('tabClaims').classList.toggle('on', t === 'claims');
+      renderList();
     }
 
     async function load() {
       const list = document.getElementById('list');
       list.innerHTML = '<div class="skeleton"></div><div class="skeleton"></div>';
       try {
-        const posts = await api(isDonor ? '/posts/my/posts' : '/posts/my/claims');
-        renderStats(posts);
-
-        if (posts.length === 0) {
-          list.innerHTML = isDonor
-            ? `<div class="empty" style="grid-column:1/-1">
-                 <h3>You haven't posted any food yet</h3>
-                 <p>Got extra food today? Share it in under a minute.</p>
-                 <button class="btn btn-primary" onclick="openPostForm()">Post food</button>
-               </div>`
-            : `<div class="empty" style="grid-column:1/-1">
-                 <h3>You haven't claimed any food yet</h3>
-                 <p>Browse what's available near you and claim a meal.</p>
-                 <a class="btn btn-primary" href="index.html#browse">Find food</a>
-               </div>`;
-          return;
-        }
-
-        list.innerHTML = posts.map(card).join('');
-        startTimers();
+        const [posts, claims] = await Promise.all([api('/posts/my/posts'), api('/posts/my/claims')]);
+        data = { posts, claims };
+        document.getElementById('tabPosts').textContent = `My posts (${posts.length})`;
+        document.getElementById('tabClaims').textContent = `My claims (${claims.length})`;
+        renderStats();
+        renderList();
       } catch (err) {
         if (!getToken()) { location.href = 'auth.html'; return; }
         list.innerHTML = `<div class="empty" style="grid-column:1/-1">
-          <h3>Couldn't load your posts</h3><p>${esc(err.message)}</p>
+          <h3>Couldn't load your dashboard</h3><p>${esc(err.message)}</p>
           <button class="btn btn-primary" onclick="load()">Try again</button></div>`;
       }
     }
@@ -124,13 +143,13 @@
 
       openModal(`
         <h2>Post surplus food</h2>
-        <p class="muted" style="margin-top:0">Receivers will see this in their city right away.</p>
+        <p class="muted" style="margin-top:0">People in your city will see this right away. Your pickup address stays private until someone claims it.</p>
         <form id="postForm" novalidate>
           <label class="field"><span>Title</span><input id="ftitle" placeholder="Chicken biryani from a wedding"></label>
           <label class="field"><span>Description (optional)</span><textarea id="fdesc" placeholder="Packed in trays, still warm"></textarea></label>
           <label class="field"><span>Quantity</span><input id="fquantity" placeholder="Feeds 25 people"></label>
           <div class="row">
-            <label class="field"><span>City</span><input id="fcity" value="${esc(user.city || '')}"></label>
+            <label class="field"><span>City</span><input id="fcity"></label>
             <label class="field"><span>Area</span><input id="farea" placeholder="Gulshan-e-Iqbal"></label>
           </div>
           <label class="field"><span>Pickup address</span><input id="faddress" placeholder="Block 5, near Aladin Park"></label>
@@ -168,6 +187,7 @@
         });
         closeModal();
         toast('Food posted');
+        setTab('posts');
         load();
       } catch (err) {
         errorBox.textContent = err.message;
@@ -191,7 +211,7 @@
     }
 
     load().then(() => {
-      if (isDonor && new URLSearchParams(location.search).get('post') === '1') {
+      if (new URLSearchParams(location.search).get('post') === '1') {
         history.replaceState(null, '', 'dashboard.html');
         openPostForm();
       }

@@ -44,14 +44,7 @@
               <label class="field"><span>Phone</span><input id="phone" type="tel" value="${esc(u.phone || '')}"></label>
             </div>
 
-            ${isAdmin
-              ? `<p class="muted">Your account type is <strong>Administrator</strong>.</p>`
-              : `<div class="roles" role="radiogroup" aria-label="Account type">
-                   <input type="radio" name="role" id="roleReceiver" value="RECEIVER" ${u.role === 'RECEIVER' ? 'checked' : ''}>
-                   <label for="roleReceiver"><strong>Receive food</strong><small>Claim and collect</small></label>
-                   <input type="radio" name="role" id="roleDonor" value="DONOR" ${u.role === 'DONOR' ? 'checked' : ''}>
-                   <label for="roleDonor"><strong>Donate food</strong><small>Post what's left</small></label>
-                 </div>`}
+            <p class="muted">Account type: <strong>${isAdmin ? 'Administrator' : 'Member'}</strong>. The same account can donate and receive food.</p>
 
             <p class="error-text" id="error" role="alert"></p>
             <button class="btn btn-primary" id="saveBtn" type="submit">Save changes</button>
@@ -73,17 +66,14 @@
       errorBox.textContent = '';
 
       const body = { name: v('name'), city: v('city'), phone: v('phone') };
-      const picked = document.querySelector('input[name="role"]:checked');
-      if (picked) body.role = picked.value;
 
       btn.disabled = true;
       btn.textContent = 'Saving...';
       try {
-        const before = getUser().role;
         const data = await api('/me', 'PATCH', body);
         saveSession(data);
         renderNav('profile');
-        toast(before !== data.user.role ? 'Account type changed' : 'Profile saved');
+        toast('Profile saved');
         load();
       } catch (err) {
         errorBox.textContent = err.message;

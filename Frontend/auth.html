@@ -25,12 +25,6 @@
         <form id="authForm" novalidate>
           <div class="reveal" id="signupFields">
             <div>
-              <div class="roles" role="radiogroup" aria-label="I want to">
-                <input type="radio" name="role" id="roleReceiver" value="RECEIVER" checked>
-                <label for="roleReceiver"><strong>Receive food</strong><small>Claim and collect</small></label>
-                <input type="radio" name="role" id="roleDonor" value="DONOR">
-                <label for="roleDonor"><strong>Donate food</strong><small>Post what's left</small></label>
-              </div>
               <label class="field"><span>Full name</span><input id="name" autocomplete="name"></label>
               <div class="row">
                 <label class="field"><span>City</span><input id="city" autocomplete="address-level2"></label>
@@ -69,7 +63,6 @@
 
     const params = new URLSearchParams(location.search);
     if (params.get('mode') === 'signup') setMode('signup');
-    if (params.get('role') === 'DONOR') document.getElementById('roleDonor').checked = true;
 
     document.getElementById('authForm').addEventListener('submit', async (e) => {
       e.preventDefault();
@@ -82,7 +75,6 @@
       if (mode === 'signup') {
         Object.assign(body, {
           name: v('name'),
-          role: document.querySelector('input[name="role"]:checked').value,
           city: v('city'),
           phone: v('phone'),
         });
