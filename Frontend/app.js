@@ -49,7 +49,8 @@ function saveSession(data) {
   localStorage.setItem('user', JSON.stringify(data.user));
 }
 
-const ROLE_LABEL = { DONOR: 'Donor', RECEIVER: 'Receiver', ADMIN: 'Admin' };
+// One account type for everyone: it can both donate and receive. Only admins are special.
+const roleLabel = (r) => (r === 'ADMIN' ? 'Admin' : 'Member');
 
 function renderNav(active) {
   const user = getUser();
@@ -64,10 +65,10 @@ function renderNav(active) {
            <div class="menu-head">
              <strong>${esc(user.name)}</strong>
              <span>${esc(user.email)}</span>
-             <span class="role-tag">${esc(ROLE_LABEL[user.role] || user.role)}</span>
+             <span class="role-tag">${esc(roleLabel(user.role))}</span>
            </div>
            <a href="profile.html" role="menuitem">My profile</a>
-           <a href="dashboard.html" role="menuitem">${user.role === 'RECEIVER' ? 'My claims' : 'My posts'}</a>
+           <a href="dashboard.html" role="menuitem">Dashboard</a>
            ${isAdmin ? '<a href="admin.html" role="menuitem">Admin panel</a>' : ''}
            <button class="danger" role="menuitem" onclick="logout()">Log out</button>
          </div>
@@ -81,7 +82,7 @@ function renderNav(active) {
       <a class="brand" href="index.html">${LOGO}Rizq Share</a>
       <div class="nav-menu" id="navMenu">
         ${link('index.html', 'Home', 'home')}
-        ${link('index.html#browse', 'Browse food', 'browse')}
+        ${link('browse.html', 'Browse food', 'browse')}
         ${link('about.html', 'About us', 'about')}
         ${link('contact.html', 'Contact us', 'contact')}
         ${isAdmin ? link('admin.html', 'Admin', 'admin') : ''}
@@ -123,37 +124,9 @@ function toggleMenu() {
   document.querySelector('.nav-toggle').setAttribute('aria-expanded', String(open));
 }
 
-// The "Donate now" button
+// The "Donate now" button: anyone with an account can post food
 function donateNow() {
-  const user = getUser();
-  if (!user) {
-    location.href = 'auth.html?mode=signup&role=DONOR';
-    return;
-  }
-  if (user.role === 'RECEIVER') {
-    openModal(`
-      <h2>Want to donate food?</h2>
-      <p class="muted">Your account is set up to receive food. Switch it to a donor account to post surplus food. You can switch back any time from My profile.</p>
-      <div class="modal-actions">
-        <button class="btn btn-ghost" onclick="closeModal()">Not now</button>
-        <button class="btn btn-primary" id="switchBtn" onclick="switchToDonor()">Switch to donor</button>
-      </div>`);
-    return;
-  }
-  location.href = 'dashboard.html?post=1';
-}
-
-async function switchToDonor() {
-  const btn = document.getElementById('switchBtn');
-  btn.disabled = true;
-  btn.textContent = 'Switching...';
-  try {
-    saveSession(await api('/me', 'PATCH', { role: 'DONOR' }));
-    location.href = 'dashboard.html?post=1';
-  } catch (err) {
-    closeModal();
-    toast(err.message, 'error');
-  }
+  location.href = getUser() ? 'dashboard.html?post=1' : 'auth.html?mode=signup';
 }
 
 /* ---------- Toasts ---------- */
@@ -248,3 +221,100 @@ const fmtDate = (iso) =>
 
 const ICON_PIN = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 21s-7-6.2-7-11a7 7 0 0 1 14 0c0 4.8-7 11-7 11z"/><circle cx="12" cy="10" r="2.5"/></svg>`;
 const ICON_USER = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8" r="4"/><path d="M4 21c1.5-4 4.5-6 8-6s6.5 2 8 6"/></svg>`;
+
+/* ---------- Food cards and claiming (used by Home and Browse) ---------- */
+function postCard(p) {
+  const me = getUser();
+  let action;
+  if (!me) {
+    action = `<a class="btn btn-ghost btn-block" href="auth.html">Log in to claim</a>`;
+  } else if (p.donorId === me.id) {
+    action = `<p class="own-note">This is your post. Manage it from your dashboard.</p>`;
+  } else {
+    action = `<button class="btn btn-primary btn-block" onclick="startClaim('${p.id}')">Claim this food</button>`;
+  }
+  return `
+    <article class="card">
+      <div class="card-top">
+        <div>
+          <h3>${esc(p.title)}</h3>
+          <span class="pill">${esc(p.quantity)}</span>
+        </div>
+        ${timerHTML(p, 'left')}
+      </div>
+      ${p.description ? `<p class="desc">${esc(p.description)}</p>` : ''}
+      <p class="meta">${ICON_PIN}<span>${esc(p.area)}, ${esc(p.city)}</span></p>
+      <p class="meta">${ICON_USER}<span>Shared by ${esc(p.donor.name)}</span></p>
+      <div class="spacer"></div>
+      ${action}
+    </article>`;
+}
+
+let pendingClaimId = null;
+
+function startClaim(id) {
+  pendingClaimId = id;
+  openModal(`
+    <h2>Claim this food?</h2>
+    <p class="muted">Once you claim it, nobody else can. You'll see the pickup address and the donor's contact right away, so please collect it before it expires.</p>
+    <div class="modal-actions">
+      <button class="btn btn-ghost" onclick="closeModal()">Cancel</button>
+      <button class="btn btn-primary" id="confirmBtn" onclick="confirmClaim()">Yes, claim it</button>
+    </div>`);
+}
+
+function refreshAfterClaim() {
+  if (typeof reloadPosts === 'function') reloadPosts();
+}
+
+async function confirmClaim() {
+  const btn = document.getElementById('confirmBtn');
+  btn.disabled = true;
+  btn.textContent = 'Claiming...';
+  try {
+    const p = await api(`/posts/${pendingClaimId}/claim`, 'PATCH');
+    const modal = openModal(`
+      <div class="success-mark">
+        <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>
+      </div>
+      <h2>It's yours</h2>
+      <p class="muted">Collect it before it expires. You can find it again in your dashboard.</p>
+      <div class="pickup">
+        <p><strong>${esc(p.title)}</strong> (${esc(p.quantity)})</p>
+        <p>${ICON_PIN} ${esc(p.address)}, ${esc(p.area)}, ${esc(p.city)}</p>
+        <p>${ICON_USER} ${esc(p.donor.name)}${p.donor.phone ? ` · <a href="tel:${esc(p.donor.phone)}">${esc(p.donor.phone)}</a>` : ''}</p>
+      </div>
+      <div class="modal-actions">
+        <button class="btn btn-ghost" onclick="copyAddress()">Copy address</button>
+        <button class="btn btn-primary" onclick="closeModal(); refreshAfterClaim();">Done</button>
+      </div>`);
+    modal.dataset.address = `${p.address}, ${p.area}, ${p.city}`;
+  } catch (err) {
+    closeModal();
+    toast(err.message, 'error');
+    refreshAfterClaim();
+  }
+}
+
+function copyAddress() {
+  const text = document.querySelector('.modal').dataset.address;
+  navigator.clipboard.writeText(text).then(
+    () => toast('Address copied'),
+    () => toast('Could not copy the address', 'error')
+  );
+}
+
+// Counts a number up once, when data arrives
+function animateCount(el, target) {
+  if (target === 0 || window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    el.textContent = target;
+    return;
+  }
+  const start = performance.now();
+  const step = (now) => {
+    const k = Math.min((now - start) / 900, 1);
+    el.textContent = Math.round(target * (1 - Math.pow(1 - k, 3)));
+    if (k < 1) requestAnimationFrame(step);
+  };
+  requestAnimationFrame(step);
+}
