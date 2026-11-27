@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../api.js';
 import { SuccessMark } from '../components/icons.jsx';
+import { LoadingButton } from '../components/ui.jsx';
 import { useAuth } from '../context/AuthContext.jsx';
 
 // Put your real contact email here (for example 'hello@yourdomain.com') to show it on this page
@@ -90,9 +91,7 @@ export default function Contact() {
                     <textarea rows={6} maxLength={2000} value={form.message} onChange={set('message')} placeholder="Write your message here" />
                   </label>
                   <p className="error-text" role="alert">{error}</p>
-                  <button className="btn btn-primary" type="submit" disabled={busy}>
-                    {busy ? 'Sending...' : 'Send message'}
-                  </button>
+                  <LoadingButton type="submit" busy={busy} busyText="Sending...">Send message</LoadingButton>
                 </form>
               </>
             )}

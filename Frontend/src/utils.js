@@ -13,9 +13,13 @@ export const fmtDate = (iso) =>
 
 export const fmtDay = (iso) => new Date(iso).toLocaleDateString([], { dateStyle: 'medium' });
 
-// A post that is still AVAILABLE but past its time is shown as expired
-export const displayStatus = (p) =>
-  p.status === 'AVAILABLE' && new Date(p.expiresAt) < new Date() ? 'EXPIRED' : p.status;
+// The status shown to people. Posts waiting for an admin show as PENDING, and a post
+// that is still AVAILABLE but past its time shows as EXPIRED.
+export const displayStatus = (p) => {
+  if (p.approval === 'PENDING') return 'PENDING';
+  if (p.approval === 'REJECTED') return 'REJECTED';
+  return p.status === 'AVAILABLE' && new Date(p.expiresAt) < new Date() ? 'EXPIRED' : p.status;
+};
 
 // One account type for everyone. Only admins are special.
 export const roleLabel = (role) => (role === 'ADMIN' ? 'Admin' : 'Member');

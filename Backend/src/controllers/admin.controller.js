@@ -12,22 +12,30 @@ const handle = (fn) => async (req, res) => {
 // GET /api/admin/stats
 const getStats = handle(async (req, res) => {
   const now = new Date();
-  const [users, admins, posts, available, claimed, collected, unreadMessages] = await Promise.all([
-    prisma.user.count(),
-    prisma.user.count({ where: { role: 'ADMIN' } }),
-    prisma.foodPost.count(),
-    prisma.foodPost.count({ where: { status: 'AVAILABLE', expiresAt: { gt: now } } }),
-    prisma.foodPost.count({ where: { status: 'CLAIMED' } }),
-    prisma.foodPost.count({ where: { status: 'COLLECTED' } }),
-    prisma.contactMessage.count({ where: { isRead: false } }),
-  ]);
+  const [users, admins, posts, available, claimed, collected, pendingPosts, unreadMessages] =
+    await Promise.all([
+      prisma.user.count(),
+      prisma.user.count({ where: { role: 'ADMIN' } }),
+      prisma.foodPost.count(),
+      prisma.foodPost.count({
+        where: { status: 'AVAILABLE', approval: 'APPROVED', expiresAt: { gt: now } },
+      }),
+      prisma.foodPost.count({ where: { status: 'CLAIMED' } }),
+      prisma.foodPost.count({ where: { status: 'COLLECTED' } }),
+      prisma.foodPost.count({ where: { approval: 'PENDING' } }),
+      prisma.contactMessage.count({ where: { isRead: false } }),
+    ]);
 
-  res.json({ users, admins, posts, available, claimed, collected, unreadMessages });
+  res.json({ users, admins, posts, available, claimed, collected, pendingPosts, unreadMessages });
 });
 
-// GET /api/admin/posts
+// GET /api/admin/posts   (optional ?approval=PENDING | APPROVED | REJECTED)
 const getAllPosts = handle(async (req, res) => {
+  const { approval } = req.query;
+  const where = ['PENDING', 'APPROVED', 'REJECTED'].includes(approval) ? { approval } : {};
+
   const posts = await prisma.foodPost.findMany({
+    where,
     orderBy: { createdAt: 'desc' },
     take: 200,
     include: {
@@ -36,6 +44,33 @@ const getAllPosts = handle(async (req, res) => {
     },
   });
   res.json(posts);
+});
+
+// PATCH /api/admin/posts/:id/approve
+const approvePost = handle(async (req, res) => {
+  const result = await prisma.foodPost.updateMany({
+    where: { id: req.params.id, approval: { not: 'APPROVED' } },
+    data: { approval: 'APPROVED', rejectionReason: null },
+  });
+  if (result.count === 0) {
+    return res.status(404).json({ error: 'Post not found or already approved' });
+  }
+  res.json({ message: 'Post approved' });
+});
+
+// PATCH /api/admin/posts/:id/reject   body: { reason? }
+const rejectPost = handle(async (req, res) => {
+  const reason = String((req.body || {}).reason || '').trim().slice(0, 200);
+
+  // Only food that nobody has claimed yet can be rejected
+  const result = await prisma.foodPost.updateMany({
+    where: { id: req.params.id, status: 'AVAILABLE' },
+    data: { approval: 'REJECTED', rejectionReason: reason || null },
+  });
+  if (result.count === 0) {
+    return res.status(404).json({ error: 'Post not found, or it was already claimed' });
+  }
+  res.json({ message: 'Post rejected' });
 });
 
 // DELETE /api/admin/posts/:id
@@ -110,6 +145,8 @@ const deleteMessage = handle(async (req, res) => {
 module.exports = {
   getStats,
   getAllPosts,
+  approvePost,
+  rejectPost,
   deletePost,
   getUsers,
   setUserRole,

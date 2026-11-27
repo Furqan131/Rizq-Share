@@ -4,12 +4,14 @@ import { api } from '../api.js';
 import CountdownRing from '../components/CountdownRing.jsx';
 import { PinIcon, UserIcon } from '../components/icons.jsx';
 import PostFoodModal from '../components/PostFoodModal.jsx';
-import { EmptyState, SkeletonGrid } from '../components/ui.jsx';
+import { EmptyState, LoadingButton, SkeletonGrid } from '../components/ui.jsx';
 import { useAuth } from '../context/AuthContext.jsx';
 import { useToast } from '../context/ToastContext.jsx';
 import { displayStatus, fmtDate } from '../utils.js';
 
 const statusLabel = (status, mode) => ({
+  PENDING: 'Pending approval',
+  REJECTED: 'Not approved',
   AVAILABLE: 'Available',
   CLAIMED: mode === 'posts' ? 'Waiting for pickup' : 'To collect',
   COLLECTED: 'Collected',
@@ -20,7 +22,7 @@ function DashCard({ post, mode, onCollect }) {
   const [busy, setBusy] = useState(false);
   const status = displayStatus(post);
   const other = mode === 'posts' ? post.claimedBy : post.donor;
-  const showTimer = status === 'AVAILABLE' || status === 'CLAIMED';
+  const showTimer = status === 'AVAILABLE' || status === 'CLAIMED' || status === 'PENDING';
 
   const collect = async () => {
     setBusy(true);
@@ -41,6 +43,12 @@ function DashCard({ post, mode, onCollect }) {
         ? <CountdownRing createdAt={post.createdAt} expiresAt={post.expiresAt} />
         : <p className="meta muted">Expires {fmtDate(post.expiresAt)}</p>}
       <p className="meta"><PinIcon /><span>{post.address}, {post.area}, {post.city}</span></p>
+      {status === 'PENDING' && (
+        <p className="note-line">An admin will review this before it goes live.</p>
+      )}
+      {status === 'REJECTED' && (
+        <p className="note-line bad">Not approved{post.rejectionReason ? `: ${post.rejectionReason}` : '.'}</p>
+      )}
       {other && (
         <p className="meta">
           <UserIcon />
@@ -52,9 +60,9 @@ function DashCard({ post, mode, onCollect }) {
       )}
       <div className="spacer" />
       {mode === 'posts' && status === 'CLAIMED' && (
-        <button className="btn btn-primary btn-block" onClick={collect} disabled={busy}>
-          {busy ? 'Saving...' : 'Mark as collected'}
-        </button>
+        <LoadingButton className="btn btn-primary btn-block" busy={busy} busyText="Saving..." onClick={collect}>
+          Mark as collected
+        </LoadingButton>
       )}
     </article>
   );
@@ -100,6 +108,7 @@ export default function Dashboard() {
 
   const count = (status) => (data ? data.posts.filter((p) => displayStatus(p) === status).length : 0);
   const stats = [
+    [count('PENDING'), 'Awaiting approval'],
     [count('AVAILABLE'), 'Posts available'],
     [count('CLAIMED'), 'Waiting for pickup'],
     [count('COLLECTED'), 'Posts collected'],

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Link, NavLink, useLocation, useNavigate } from 'react-router-dom';
+import { api } from '../api.js';
 import { useAuth } from '../context/AuthContext.jsx';
 import { useDonate } from '../hooks/useDonate.js';
 import { roleLabel } from '../utils.js';
@@ -13,6 +14,16 @@ export default function Navbar() {
   const [menuOpen, setMenuOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
   const profileRef = useRef(null);
+  const [pending, setPending] = useState(0);
+
+  // Admins see how many posts are waiting for approval
+  useEffect(() => {
+    if (!isAdmin) { setPending(0); return undefined; }
+    const refresh = () => api('/admin/stats').then((s) => setPending(s.pendingPosts)).catch(() => {});
+    refresh();
+    window.addEventListener('admin:refresh', refresh);
+    return () => window.removeEventListener('admin:refresh', refresh);
+  }, [isAdmin, location.pathname]);
 
   // Close menus when the page changes
   useEffect(() => {
@@ -49,7 +60,11 @@ export default function Navbar() {
           <NavLink to="/browse">Browse food</NavLink>
           <NavLink to="/about">About us</NavLink>
           <NavLink to="/contact">Contact us</NavLink>
-          {isAdmin && <NavLink to="/admin">Admin</NavLink>}
+          {isAdmin && (
+            <NavLink to="/admin">
+              Admin{pending > 0 && <span className="count-dot">{pending}</span>}
+            </NavLink>
+          )}
         </div>
 
         <div className="nav-actions">

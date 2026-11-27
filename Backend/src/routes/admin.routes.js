@@ -2,6 +2,8 @@ const express = require('express');
 const {
   getStats,
   getAllPosts,
+  approvePost,
+  rejectPost,
   deletePost,
   getUsers,
   setUserRole,
@@ -19,6 +21,8 @@ router.use(requireAuth, requireAdmin);
 
 router.get('/stats', getStats);
 router.get('/posts', getAllPosts);
+router.patch('/posts/:id/approve', approvePost);
+router.patch('/posts/:id/reject', rejectPost);
 router.delete('/posts/:id', deletePost);
 router.get('/users', getUsers);
 router.patch('/users/:id/role', setUserRole);

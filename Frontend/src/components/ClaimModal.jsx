@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { api } from '../api.js';
 import { useToast } from '../context/ToastContext.jsx';
 import Modal from './Modal.jsx';
+import { LoadingButton } from './ui.jsx';
 import { PinIcon, UserIcon, SuccessMark } from './icons.jsx';
 
 // Step 1: confirm. Step 2: show the pickup details.
@@ -43,9 +44,7 @@ export default function ClaimModal({ post, onClose, onDone }) {
         </p>
         <div className="modal-actions">
           <button className="btn btn-ghost" onClick={close}>Cancel</button>
-          <button className="btn btn-primary" onClick={confirm} disabled={busy}>
-            {busy ? 'Claiming...' : 'Yes, claim it'}
-          </button>
+          <LoadingButton busy={busy} busyText="Claiming..." onClick={confirm}>Yes, claim it</LoadingButton>
         </div>
       </Modal>
     );

@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Navigate, useLocation, useSearchParams } from 'react-router-dom';
 import { api } from '../api.js';
+import { LoadingButton, LoadingOverlay } from '../components/ui.jsx';
 import { useAuth } from '../context/AuthContext.jsx';
 
 export default function Auth() {
@@ -37,8 +38,13 @@ export default function Auth() {
     }
 
     setBusy(true);
+    const started = Date.now();
     try {
-      login(await api('/auth/' + mode, 'POST', body));
+      const data = await api('/auth/' + mode, 'POST', body);
+      // Keep the loading screen up for a moment so it is noticeable even on a fast server
+      const remaining = 700 - (Date.now() - started);
+      if (remaining > 0) await new Promise((resolve) => setTimeout(resolve, remaining));
+      login(data);
     } catch (err) {
       setError(err.message);
       setBusy(false);
@@ -90,12 +96,18 @@ export default function Auth() {
             </label>
 
             <p className="error-text" role="alert">{error}</p>
-            <button className="btn btn-primary btn-block" type="submit" disabled={busy}>
-              {busy ? 'Please wait...' : signup ? 'Create account' : 'Log in'}
-            </button>
+            <LoadingButton className="btn btn-primary btn-block" type="submit" busy={busy} busyText={signup ? 'Creating account...' : 'Logging in...'}>
+              {signup ? 'Create account' : 'Log in'}
+            </LoadingButton>
           </form>
         </div>
       </section>
+      {busy && (
+        <LoadingOverlay
+          title={signup ? 'Creating your account...' : 'Logging you in...'}
+          text="Just a moment"
+        />
+      )}
     </main>
   );
 }

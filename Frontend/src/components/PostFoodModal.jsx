@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { api } from '../api.js';
 import { useToast } from '../context/ToastContext.jsx';
 import Modal from './Modal.jsx';
+import { LoadingButton } from './ui.jsx';
 
 export default function PostFoodModal({ onClose, onPosted }) {
   const toast = useToast();
@@ -28,7 +29,7 @@ export default function PostFoodModal({ onClose, onPosted }) {
     setError('');
     setBusy(true);
     try {
-      await api('/posts', 'POST', {
+      const created = await api('/posts', 'POST', {
         title: form.title.trim(),
         description: form.description.trim(),
         quantity: form.quantity.trim(),
@@ -38,7 +39,11 @@ export default function PostFoodModal({ onClose, onPosted }) {
         expiresAt: form.expires ? new Date(form.expires).toISOString() : '',
       });
       localStorage.setItem('lastCity', form.city.trim());
-      toast('Food posted');
+      toast(
+        created.approval === 'PENDING'
+          ? 'Submitted. It will go live once an admin approves it.'
+          : 'Food posted'
+      );
       onPosted();
       onClose();
     } catch (err) {
@@ -51,7 +56,7 @@ export default function PostFoodModal({ onClose, onPosted }) {
     <Modal onClose={onClose}>
       <h2>Post surplus food</h2>
       <p className="muted" style={{ marginTop: 0 }}>
-        People in your city will see this right away. Your pickup address stays private until someone claims it.
+        An admin reviews every post before it goes live. Your pickup address stays private until someone claims it.
       </p>
       <form onSubmit={submit} noValidate>
         <label className="field"><span>Title</span>
@@ -80,9 +85,7 @@ export default function PostFoodModal({ onClose, onPosted }) {
         <p className="error-text" role="alert">{error}</p>
         <div className="modal-actions">
           <button type="button" className="btn btn-ghost" onClick={onClose}>Cancel</button>
-          <button type="submit" className="btn btn-primary" disabled={busy}>
-            {busy ? 'Posting...' : 'Post food'}
-          </button>
+          <LoadingButton type="submit" busy={busy} busyText="Submitting...">Submit for approval</LoadingButton>
         </div>
       </form>
     </Modal>

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api } from '../api.js';
+import { LoadingButton } from '../components/ui.jsx';
 import { useAuth } from '../context/AuthContext.jsx';
 import { useToast } from '../context/ToastContext.jsx';
 import { useDonate } from '../hooks/useDonate.js';
@@ -103,9 +104,7 @@ export default function Profile() {
                   Account type: <strong>{profile.role === 'ADMIN' ? 'Administrator' : 'Member'}</strong>. The same account can donate and receive food.
                 </p>
                 <p className="error-text" role="alert">{error}</p>
-                <button className="btn btn-primary" type="submit" disabled={busy}>
-                  {busy ? 'Saving...' : 'Save changes'}
-                </button>
+                <LoadingButton type="submit" busy={busy} busyText="Saving...">Save changes</LoadingButton>
               </form>
             </>
           )}

@@ -19,6 +19,13 @@ const createPost = async (req, res) => {
       return res.status(400).json({ error: 'Expiry time must be a valid time in the future' });
     }
 
+    // Every post waits for an admin to approve it, unless an admin posts it
+    const poster = await prisma.user.findUnique({
+      where: { id: req.user.id },
+      select: { role: true },
+    });
+    const approval = poster && poster.role === 'ADMIN' ? 'APPROVED' : 'PENDING';
+
     const post = await prisma.foodPost.create({
       data: {
         title: String(title).trim(),
@@ -29,6 +36,7 @@ const createPost = async (req, res) => {
         address: String(address).trim(),
         expiresAt: expiryDate,
         donorId: req.user.id,
+        approval,
       },
     });
 
@@ -38,7 +46,7 @@ const createPost = async (req, res) => {
   }
 };
 
-// Public list of available food. The pickup address and phone numbers are NOT
+// Public list of available, admin-approved food. The pickup address and phone numbers are NOT
 // included here: they are only shown to the person who claims the food.
 const getPosts = async (req, res) => {
   try {
@@ -48,6 +56,7 @@ const getPosts = async (req, res) => {
     const posts = await prisma.foodPost.findMany({
       where: {
         status: 'AVAILABLE',
+        approval: 'APPROVED',
         expiresAt: { gt: new Date() },
         ...(city && { city: { equals: city, mode: 'insensitive' } }),
         ...(area && { area: { contains: area, mode: 'insensitive' } }),
@@ -67,7 +76,7 @@ const getPosts = async (req, res) => {
 const getPublicStats = async (req, res) => {
   try {
     const [available, collected, members] = await Promise.all([
-      prisma.foodPost.count({ where: { status: 'AVAILABLE', expiresAt: { gt: new Date() } } }),
+      prisma.foodPost.count({ where: { status: 'AVAILABLE', approval: 'APPROVED', expiresAt: { gt: new Date() } } }),
       prisma.foodPost.count({ where: { status: 'COLLECTED' } }),
       prisma.user.count(),
     ]);
@@ -88,6 +97,7 @@ const claimPost = async (req, res) => {
       where: {
         id,
         status: 'AVAILABLE',
+        approval: 'APPROVED',
         expiresAt: { gt: new Date() },
         donorId: { not: req.user.id },
       },
