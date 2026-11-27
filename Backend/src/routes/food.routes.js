@@ -2,23 +2,25 @@ const express = require('express');
 const {
   createPost,
   getPosts,
+  getPublicStats,
   claimPost,
   markCollected,
   getMyPosts,
   getMyClaims,
 } = require('../controllers/food.controller');
-const { requireAuth, requireRole } = require('../middleware/auth');
+const { requireAuth } = require('../middleware/auth');
 
 const router = express.Router();
 
+// Public
 router.get('/', getPosts);
-router.post('/', requireAuth, requireRole('DONOR', 'ADMIN'), createPost);
+router.get('/stats', getPublicStats);
 
-// These must come before any route with /:id
-router.get('/my/posts', requireAuth, requireRole('DONOR', 'ADMIN'), getMyPosts);
-router.get('/my/claims', requireAuth, requireRole('RECEIVER', 'ADMIN'), getMyClaims);
-
-router.patch('/:id/claim', requireAuth, requireRole('RECEIVER', 'ADMIN'), claimPost);
-router.patch('/:id/collect', requireAuth, requireRole('DONOR', 'ADMIN'), markCollected);
+// Any logged-in user can donate and receive
+router.post('/', requireAuth, createPost);
+router.get('/my/posts', requireAuth, getMyPosts);
+router.get('/my/claims', requireAuth, getMyClaims);
+router.patch('/:id/claim', requireAuth, claimPost);
+router.patch('/:id/collect', requireAuth, markCollected);
 
 module.exports = router;

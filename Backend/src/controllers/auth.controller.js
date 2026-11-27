@@ -2,9 +2,22 @@ const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const prisma = require('../config/db');
 
+const makeToken = (user) =>
+  jwt.sign({ id: user.id, role: user.role }, process.env.JWT_SECRET, { expiresIn: '7d' });
+
+const safeUser = (user) => ({
+  id: user.id,
+  name: user.name,
+  email: user.email,
+  role: user.role,
+});
+
+// Everyone signs up the same way. One account can both donate and receive food.
+// (The role column now only matters for ADMIN.)
 const signup = async (req, res) => {
   try {
-    const { name, email, password, role, city, phone } = req.body;
+    const { name, password, city, phone } = req.body || {};
+    const email = String((req.body || {}).email || '').trim().toLowerCase();
 
     if (!name || !email || !password) {
       return res.status(400).json({ error: 'Name, email and password are required' });
@@ -14,10 +27,6 @@ const signup = async (req, res) => {
       return res.status(400).json({ error: 'Password must be at least 6 characters' });
     }
 
-    // Only these two roles can be chosen at signup (never ADMIN)
-    const allowedRoles = ['DONOR', 'RECEIVER'];
-    const userRole = allowedRoles.includes(role) ? role : 'RECEIVER';
-
     const existing = await prisma.user.findUnique({ where: { email } });
     if (existing) {
       return res.status(409).json({ error: 'Email already registered' });
@@ -26,19 +35,16 @@ const signup = async (req, res) => {
     const passwordHash = await bcrypt.hash(password, 10);
 
     const user = await prisma.user.create({
-      data: { name, email, passwordHash, role: userRole, city, phone },
+      data: {
+        name: String(name).trim(),
+        email,
+        passwordHash,
+        city: city ? String(city).trim() : null,
+        phone: phone ? String(phone).trim() : null,
+      },
     });
 
-    const token = jwt.sign(
-      { id: user.id, role: user.role },
-      process.env.JWT_SECRET,
-      { expiresIn: '7d' }
-    );
-
-    res.status(201).json({
-      token,
-      user: { id: user.id, name: user.name, email: user.email, role: user.role },
-    });
+    res.status(201).json({ token: makeToken(user), user: safeUser(user) });
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: 'Something went wrong' });
@@ -47,7 +53,8 @@ const signup = async (req, res) => {
 
 const login = async (req, res) => {
   try {
-    const { email, password } = req.body;
+    const password = (req.body || {}).password;
+    const email = String((req.body || {}).email || '').trim().toLowerCase();
 
     if (!email || !password) {
       return res.status(400).json({ error: 'Email and password are required' });
@@ -63,16 +70,7 @@ const login = async (req, res) => {
       return res.status(401).json({ error: 'Invalid email or password' });
     }
 
-    const token = jwt.sign(
-      { id: user.id, role: user.role },
-      process.env.JWT_SECRET,
-      { expiresIn: '7d' }
-    );
-
-    res.json({
-      token,
-      user: { id: user.id, name: user.name, email: user.email, role: user.role },
-    });
+    res.json({ token: makeToken(user), user: safeUser(user) });
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: 'Something went wrong' });

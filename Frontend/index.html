@@ -1,170 +1,19 @@
 <!DOCTYPE html>
 <html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Rizq Share - Share surplus food</title>
-  <link rel="stylesheet" href="style.css">
-</head>
-<body>
-  <nav id="nav"></nav>
-
-  <header class="hero">
-    <div class="container hero-grid">
-      <div>
-        <h1 class="rise">Good food shouldn't go to waste.</h1>
-        <p class="lead rise">Weddings, restaurants and homes end the day with extra food. Post it here, and someone nearby collects it before it spoils.</p>
-        <div class="hero-cta rise">
-          <a class="btn btn-accent" href="browse.html">Find food near you</a>
-          <button class="btn btn-outline-light" onclick="donateNow()">Donate now</button>
-        </div>
-      </div>
-      <div class="rise card-slot" id="heroCard"></div>
-    </div>
-  </header>
-
-  <section class="band" aria-label="Rizq Share in numbers">
-    <div class="container band-grid">
-      <div><strong id="statAvailable">0</strong><span>Posts available now</span></div>
-      <div><strong id="statCollected">0</strong><span>Posts collected so far</span></div>
-      <div><strong id="statMembers">0</strong><span>People in the community</span></div>
-    </div>
-  </section>
-
-  <section class="section container" id="latest">
-    <div class="section-head">
-      <h2>Available now</h2>
-      <a class="more-link" href="browse.html">See all food</a>
-    </div>
-    <div class="grid" id="list"></div>
-  </section>
-
-  <section class="section container" id="how" style="padding-top:8px">
-    <div class="section-head"><h2>How it works</h2></div>
-    <div class="steps">
-      <div class="step"><b>1</b><h3>Post your food</h3><p>Add what you have, how many people it feeds, where to pick it up and when it expires.</p></div>
-      <div class="step"><b>2</b><h3>Someone claims it</h3><p>Browse by city and area. Claim a post and the pickup details appear instantly.</p></div>
-      <div class="step"><b>3</b><h3>Food gets collected</h3><p>The donor confirms the pickup, and the meal reaches someone who needs it.</p></div>
-    </div>
-  </section>
-
-  <section class="section container" style="padding-top:8px">
-    <div class="section-head"><h2>Why Rizq Share</h2></div>
-    <div class="cards-4">
-      <div class="info-card"><h3>See how long it stays good</h3><p>Every post has a live countdown, so you know exactly how much time is left to collect.</p></div>
-      <div class="info-card"><h3>Find food near you</h3><p>Filter by city and area to find food you can actually reach in time.</p></div>
-      <div class="info-card"><h3>No double claims</h3><p>Once someone claims a post, it is reserved for them, so nobody travels for food that is gone.</p></div>
-      <div class="info-card"><h3>Private until claimed</h3><p>Pickup addresses and phone numbers are only shown to the person who claims the food.</p></div>
-    </div>
-  </section>
-
-  <section class="section container" style="padding-top:8px">
-    <div class="section-head"><h2>Sharing food safely</h2></div>
-    <div class="tips-grid">
-      <div class="tip-card">
-        <h3>If you're donating</h3>
-        <ul>
-          <li>Post only food that is fresh and has been stored properly.</li>
-          <li>Pack it in clean, covered containers.</li>
-          <li>Set a realistic best-before time and be honest about the quantity.</li>
-          <li>Mark the post as collected once it is picked up.</li>
-        </ul>
-      </div>
-      <div class="tip-card">
-        <h3>If you're collecting</h3>
-        <ul>
-          <li>Claim only what you can pick up before the timer runs out.</li>
-          <li>Bring your own containers if you can.</li>
-          <li>Check the food yourself before eating or sharing it.</li>
-          <li>Be kind and on time: someone prepared this for you.</li>
-        </ul>
-      </div>
-    </div>
-  </section>
-
-  <section class="section container" style="padding-top:8px">
-    <div class="cta-band">
-      <h2>Got extra food today? Someone nearby can use it.</h2>
-      <div class="hero-cta">
-        <button class="btn btn-accent" onclick="donateNow()">Donate now</button>
-        <a class="btn btn-outline-light" href="browse.html">Browse food</a>
-      </div>
-    </div>
-  </section>
-
-  <footer><div class="container">Rizq Share: sharing surplus food in Pakistan.</div></footer>
-
-  <script src="app.js"></script>
-  <script>
-    renderNav('home');
-
-    function heroCard(posts) {
-      const box = document.getElementById('heroCard');
-      if (posts.length === 0) {
-        box.innerHTML = `
-          <div class="spotlight">
-            <h3>Nothing posted right now</h3>
-            <p class="small">Have extra food? Be the first to share it today.</p>
-          </div>`;
-        return;
-      }
-      const p = posts[0];
-      box.innerHTML = `
-        <div class="spotlight">
-          <span class="small">Expiring soonest</span>
-          <h3>${esc(p.title)}</h3>
-          <p class="small" style="margin:0 0 16px">${esc(p.quantity)} in ${esc(p.area)}, ${esc(p.city)}</p>
-          ${timerHTML(p, 'left to collect')}
-          <a class="btn btn-primary btn-block" href="browse.html">See all food</a>
-        </div>`;
-    }
-
-    let statsShown = false;
-    async function loadStats() {
-      try {
-        const s = await api('/posts/stats');
-        if (statsShown) {
-          document.getElementById('statAvailable').textContent = s.available;
-          document.getElementById('statCollected').textContent = s.collected;
-          document.getElementById('statMembers').textContent = s.members;
-          return;
-        }
-        statsShown = true;
-        animateCount(document.getElementById('statAvailable'), s.available);
-        animateCount(document.getElementById('statCollected'), s.collected);
-        animateCount(document.getElementById('statMembers'), s.members);
-      } catch (err) { /* the numbers simply stay at 0 */ }
-    }
-
-    async function loadHome() {
-      const list = document.getElementById('list');
-      if (!list.children.length) {
-        list.innerHTML = '<div class="skeleton"></div><div class="skeleton"></div><div class="skeleton"></div>';
-      }
-      loadStats();
-      try {
-        const posts = await api('/posts?limit=6');
-        heroCard(posts);
-        list.innerHTML = posts.length
-          ? posts.map(postCard).join('')
-          : `<div class="empty" style="grid-column:1/-1">
-               <h3>No food available right now</h3>
-               <p>Be the first to share something today.</p>
-               <button class="btn btn-primary" onclick="donateNow()">Donate now</button>
-             </div>`;
-        startTimers();
-      } catch (err) {
-        document.getElementById('heroCard').innerHTML = '';
-        list.innerHTML = `<div class="empty" style="grid-column:1/-1">
-          <h3>Couldn't load food posts</h3><p>${esc(err.message)}</p>
-          <button class="btn btn-primary" onclick="loadHome()">Try again</button></div>`;
-      }
-    }
-
-    // Called by the shared claim flow after someone claims food
-    function reloadPosts() { loadHome(); }
-
-    loadHome();
-  </script>
-</body>
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="theme-color" content="#0e3b2f" />
+    <title>Rizq Share - Share surplus food</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,600;12..96,700;12..96,800&family=Figtree:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.jsx"></script>
+  </body>
 </html>

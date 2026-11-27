@@ -20,6 +20,12 @@ enum PostStatus {
   EXPIRED
 }
 
+enum ApprovalStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
 model User {
   id           String     @id @default(uuid())
   name         String
@@ -44,9 +50,23 @@ model FoodPost {
   imageUrl    String?
   expiresAt   DateTime
   status      PostStatus @default(AVAILABLE)
+  approval        ApprovalStatus @default(PENDING)
+  rejectionReason String?
   createdAt   DateTime   @default(now())
   donorId     String
   donor       User       @relation("DonorPosts", fields: [donorId], references: [id])
   claimedById String?
   claimedBy   User?      @relation("ReceiverClaims", fields: [claimedById], references: [id])
+}
+
+
+
+model ContactMessage {
+  id        String   @id @default(uuid())
+  name      String
+  email     String
+  subject   String?
+  message   String
+  isRead    Boolean  @default(false)
+  createdAt DateTime @default(now())
 }
