@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Navigate, useLocation, useSearchParams } from 'react-router-dom';
+import { Link, Navigate, useLocation, useSearchParams } from 'react-router-dom';
 import { api } from '../api.js';
 import { LoadingButton, LoadingOverlay } from '../components/ui.jsx';
 import { useAuth } from '../context/AuthContext.jsx';
@@ -34,6 +34,7 @@ export default function Auth() {
     const body = { email: form.email.trim(), password: form.password };
     if (signup) {
       if (!form.name.trim()) { setError('Please enter your name.'); return; }
+      if (form.password.length < 8) { setError('Password must be at least 8 characters.'); return; }
       Object.assign(body, { name: form.name.trim(), city: form.city.trim(), phone: form.phone.trim() });
     }
 
@@ -91,9 +92,13 @@ export default function Auth() {
                 value={form.password}
                 onChange={set('password')}
                 autoComplete={signup ? 'new-password' : 'current-password'}
-                placeholder="At least 6 characters"
+                placeholder="At least 8 characters"
               />
             </label>
+
+            {!signup && (
+              <p className="forgot"><Link to="/forgot-password" className="more-link">Forgot your password?</Link></p>
+            )}
 
             <p className="error-text" role="alert">{error}</p>
             <LoadingButton className="btn btn-primary btn-block" type="submit" busy={busy} busyText={signup ? 'Creating account...' : 'Logging in...'}>

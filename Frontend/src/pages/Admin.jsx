@@ -123,6 +123,7 @@ function ApprovalsTab({ onPending }) {
           const expired = new Date(p.expiresAt) < new Date();
           return (
             <article className="card" key={p.id}>
+              {p.imageUrl && <img className="card-img" src={p.imageUrl} alt={p.title} loading="lazy" />}
               <div className="card-top">
                 <div>
                   <h3>{p.title}</h3>

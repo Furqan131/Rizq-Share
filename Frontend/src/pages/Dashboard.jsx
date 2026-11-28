@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import { api } from '../api.js';
+import ConfirmModal from '../components/ConfirmModal.jsx';
 import CountdownRing from '../components/CountdownRing.jsx';
 import { PinIcon, UserIcon } from '../components/icons.jsx';
 import PostFoodModal from '../components/PostFoodModal.jsx';
@@ -18,7 +19,10 @@ const statusLabel = (status, mode) => ({
   EXPIRED: 'Expired',
 }[status]);
 
-function DashCard({ post, mode, onCollect }) {
+// Posts nobody is collecting can be cancelled or deleted by their owner
+const REMOVABLE = ['PENDING', 'AVAILABLE', 'REJECTED', 'EXPIRED'];
+
+function DashCard({ post, mode, onCollect, onAsk }) {
   const [busy, setBusy] = useState(false);
   const status = displayStatus(post);
   const other = mode === 'posts' ? post.claimedBy : post.donor;
@@ -32,6 +36,7 @@ function DashCard({ post, mode, onCollect }) {
 
   return (
     <article className="card">
+      {post.imageUrl && <img className="card-img" src={post.imageUrl} alt={post.title} loading="lazy" />}
       <div className="card-top">
         <div>
           <h3>{post.title}</h3>
@@ -59,11 +64,29 @@ function DashCard({ post, mode, onCollect }) {
         </p>
       )}
       <div className="spacer" />
-      {mode === 'posts' && status === 'CLAIMED' && (
-        <LoadingButton className="btn btn-primary btn-block" busy={busy} busyText="Saving..." onClick={collect}>
-          Mark as collected
-        </LoadingButton>
-      )}
+
+      <div className="card-actions">
+        {mode === 'posts' && status === 'CLAIMED' && (
+          <>
+            <LoadingButton className="btn btn-primary btn-block" busy={busy} busyText="Saving..." onClick={collect}>
+              Mark as collected
+            </LoadingButton>
+            <button className="btn btn-ghost btn-block" onClick={() => onAsk('release', post, mode)}>
+              Receiver not coming? Release claim
+            </button>
+          </>
+        )}
+        {mode === 'claims' && status === 'CLAIMED' && (
+          <button className="btn btn-ghost btn-block" onClick={() => onAsk('release', post, mode)}>
+            I can't collect this
+          </button>
+        )}
+        {mode === 'posts' && REMOVABLE.includes(status) && (
+          <button className="btn btn-ghost btn-block" onClick={() => onAsk('cancel', post, mode)}>
+            {status === 'REJECTED' || status === 'EXPIRED' ? 'Delete post' : 'Cancel post'}
+          </button>
+        )}
+      </div>
     </article>
   );
 }
@@ -75,11 +98,16 @@ export default function Dashboard() {
   const [tab, setTab] = useState('posts');
   const [data, setData] = useState(null);
   const [error, setError] = useState('');
-  const [posting, setPosting] = useState(params.get('post') === '1');
+  const [posting, setPosting] = useState(false);
+  const [confirm, setConfirm] = useState(null); // { kind: 'cancel' | 'release', post, mode }
 
-  // Remove ?post=1 from the address once the form has opened
+  // "Donate now" sends people here with ?post=1, also when they are already on this page.
+  // Open the form, then tidy the address.
   useEffect(() => {
-    if (params.get('post') === '1') setParams({}, { replace: true });
+    if (params.get('post') === '1') {
+      setPosting(true);
+      setParams({}, { replace: true });
+    }
   }, [params, setParams]);
 
   const load = useCallback(async () => {
@@ -94,16 +122,49 @@ export default function Dashboard() {
 
   useEffect(() => { load(); }, [load]);
 
-  const collect = async (id) => {
+  // Each action returns true when it worked
+  const act = async (path, method, successText) => {
     try {
-      await api(`/posts/${id}/collect`, 'PATCH');
-      toast('Marked as collected');
+      await api(path, method);
+      toast(successText);
       load();
       return true;
     } catch (err) {
       toast(err.message, 'error');
       return false;
     }
+  };
+
+  const collect = (id) => act(`/posts/${id}/collect`, 'PATCH', 'Marked as collected');
+
+  const confirmConfig = () => {
+    const { kind, post, mode } = confirm;
+    if (kind === 'cancel') {
+      const gone = ['REJECTED', 'EXPIRED'].includes(displayStatus(post));
+      return {
+        title: gone ? 'Delete this post?' : 'Cancel this post?',
+        text: 'It will be removed, and nobody will be able to claim it.',
+        confirmText: gone ? 'Yes, delete it' : 'Yes, cancel post',
+        busyText: 'Removing...',
+        danger: true,
+        run: () => act(`/posts/${post.id}`, 'DELETE', 'Post removed'),
+      };
+    }
+    return mode === 'posts'
+      ? {
+          title: 'Release this claim?',
+          text: 'The receiver loses the reservation, and the food goes back on the Browse page for someone else.',
+          confirmText: 'Yes, release it',
+          busyText: 'Releasing...',
+          run: () => act(`/posts/${post.id}/release`, 'PATCH', 'Released. The food is available again.'),
+        }
+      : {
+          title: 'Give this food back?',
+          text: 'It goes back on the Browse page so someone else can claim it.',
+          confirmText: 'Yes, give it back',
+          busyText: 'Releasing...',
+          run: () => act(`/posts/${post.id}/release`, 'PATCH', 'Done. The food is available again.'),
+        };
   };
 
   const count = (status) => (data ? data.posts.filter((p) => displayStatus(p) === status).length : 0);
@@ -116,6 +177,7 @@ export default function Dashboard() {
   ];
 
   const list = data ? data[tab] : null;
+  const cfg = confirm ? confirmConfig() : null;
 
   return (
     <>
@@ -161,16 +223,39 @@ export default function Dashboard() {
           )
         ) : (
           <div className="grid">
-            {list.map((p) => <DashCard key={p.id} post={p} mode={tab} onCollect={collect} />)}
+            {list.map((p) => (
+              <DashCard
+                key={p.id}
+                post={p}
+                mode={tab}
+                onCollect={collect}
+                onAsk={(kind, post, mode) => setConfirm({ kind, post, mode })}
+              />
+            ))}
           </div>
         )}
       </main>
-
 
       {posting && (
         <PostFoodModal
           onClose={() => setPosting(false)}
           onPosted={() => { setTab('posts'); load(); }}
+        />
+      )}
+
+      {confirm && (
+        <ConfirmModal
+          title={cfg.title}
+          text={cfg.text}
+          confirmText={cfg.confirmText}
+          busyText={cfg.busyText}
+          danger={cfg.danger}
+          onClose={() => setConfirm(null)}
+          onConfirm={async () => {
+            const ok = await cfg.run();
+            if (ok) setConfirm(null);
+            return ok;
+          }}
         />
       )}
     </>

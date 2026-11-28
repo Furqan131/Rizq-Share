@@ -21,6 +21,7 @@ export default function FoodCard({ post, onClaim }) {
 
   return (
     <article className="card">
+      {post.imageUrl && <img className="card-img" src={post.imageUrl} alt={post.title} loading="lazy" />}
       <div className="card-top">
         <div>
           <h3>{post.title}</h3>

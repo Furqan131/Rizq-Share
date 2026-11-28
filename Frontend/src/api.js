@@ -24,11 +24,36 @@ export async function api(path, method = 'GET', body) {
   if (!res.ok) {
     // An expired or invalid token means the person must log in again
     if (res.status === 401 && token) window.dispatchEvent(new Event('auth:expired'));
-    if (data && data.error) throw new Error(data.error);
-    if (res.status === 404) {
+    if (res.status === 404 && (!data || data.error === 'Route not found')) {
       throw new Error('The server does not have this feature yet. Restart the backend and check the routes in server.js.');
     }
+    if (data && data.error) throw new Error(data.error);
     throw new Error('Something went wrong');
+  }
+  return data;
+}
+
+// Uploads a food photo. Returns { url, publicId }.
+export async function upload(file) {
+  const form = new FormData();
+  form.append('photo', file);
+  const token = getToken();
+
+  let res;
+  try {
+    res = await fetch(API + '/uploads', {
+      method: 'POST',
+      headers: token ? { Authorization: 'Bearer ' + token } : {},
+      body: form,
+    });
+  } catch {
+    throw new Error('Cannot reach the server. Check that the backend is running.');
+  }
+
+  const data = await res.json().catch(() => null);
+  if (!res.ok) {
+    if (res.status === 401 && token) window.dispatchEvent(new Event('auth:expired'));
+    throw new Error((data && data.error) || 'The photo could not be uploaded');
   }
   return data;
 }
