@@ -5,6 +5,8 @@ const {
   getPublicStats,
   claimPost,
   markCollected,
+  releaseClaim,
+  cancelPost,
   getMyPosts,
   getMyClaims,
 } = require('../controllers/food.controller');
@@ -22,5 +24,7 @@ router.get('/my/posts', requireAuth, getMyPosts);
 router.get('/my/claims', requireAuth, getMyClaims);
 router.patch('/:id/claim', requireAuth, claimPost);
 router.patch('/:id/collect', requireAuth, markCollected);
+router.patch('/:id/release', requireAuth, releaseClaim);
+router.delete('/:id', requireAuth, cancelPost);
 
 module.exports = router;

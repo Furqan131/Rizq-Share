@@ -37,6 +37,7 @@ model User {
   createdAt    DateTime   @default(now())
   posts        FoodPost[] @relation("DonorPosts")
   claims       FoodPost[] @relation("ReceiverClaims")
+  resetTokens  PasswordResetToken[]
 }
 
 model FoodPost {
@@ -48,6 +49,7 @@ model FoodPost {
   area        String
   address     String
   imageUrl    String?
+  imagePublicId String?
   expiresAt   DateTime
   status      PostStatus @default(AVAILABLE)
   approval        ApprovalStatus @default(PENDING)
@@ -59,8 +61,6 @@ model FoodPost {
   claimedBy   User?      @relation("ReceiverClaims", fields: [claimedById], references: [id])
 }
 
-
-
 model ContactMessage {
   id        String   @id @default(uuid())
   name      String
@@ -69,4 +69,12 @@ model ContactMessage {
   message   String
   isRead    Boolean  @default(false)
   createdAt DateTime @default(now())
+}
+model PasswordResetToken {
+  id        String   @id @default(uuid())
+  tokenHash String   @unique
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 }

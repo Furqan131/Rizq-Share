@@ -27,9 +27,9 @@ const submitMessage = async (req, res) => {
     });
 
     res.status(201).json({ message: 'Message received' });
-    } catch (error) {
+  } catch (error) {
     console.error(error);
-    res.status(500).json({ error: 'Something went wrong', detail: error.message });
+    res.status(500).json({ error: 'Something went wrong' });
   }
 };
 

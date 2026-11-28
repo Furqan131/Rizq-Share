@@ -1,4 +1,5 @@
 const prisma = require('../config/db');
+const { deleteImage } = require('../utils/cloudinary');
 
 const handle = (fn) => async (req, res) => {
   try {
@@ -22,7 +23,9 @@ const getStats = handle(async (req, res) => {
       }),
       prisma.foodPost.count({ where: { status: 'CLAIMED' } }),
       prisma.foodPost.count({ where: { status: 'COLLECTED' } }),
-      prisma.foodPost.count({ where: { approval: 'PENDING' } }),
+      prisma.foodPost.count({
+        where: { approval: 'PENDING', status: 'AVAILABLE', expiresAt: { gt: now } },
+      }),
       prisma.contactMessage.count({ where: { isRead: false } }),
     ]);
 
@@ -32,7 +35,11 @@ const getStats = handle(async (req, res) => {
 // GET /api/admin/posts   (optional ?approval=PENDING | APPROVED | REJECTED)
 const getAllPosts = handle(async (req, res) => {
   const { approval } = req.query;
-  const where = ['PENDING', 'APPROVED', 'REJECTED'].includes(approval) ? { approval } : {};
+  let where = ['PENDING', 'APPROVED', 'REJECTED'].includes(approval) ? { approval } : {};
+  if (approval === 'PENDING') {
+    // Posts whose time already ran out can't go live any more
+    where = { approval: 'PENDING', status: 'AVAILABLE', expiresAt: { gt: new Date() } };
+  }
 
   const posts = await prisma.foodPost.findMany({
     where,
@@ -75,8 +82,13 @@ const rejectPost = handle(async (req, res) => {
 
 // DELETE /api/admin/posts/:id
 const deletePost = handle(async (req, res) => {
+  const post = await prisma.foodPost.findUnique({
+    where: { id: req.params.id },
+    select: { imagePublicId: true },
+  });
   const result = await prisma.foodPost.deleteMany({ where: { id: req.params.id } });
   if (result.count === 0) return res.status(404).json({ error: 'Post not found' });
+  if (post) deleteImage(post.imagePublicId);
   res.json({ message: 'Post deleted' });
 });
 
